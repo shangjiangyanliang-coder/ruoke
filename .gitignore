@@ -1,0 +1,66 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ─── 若可项目本地附加（按 CLAUDE.md 安全开发模式）───
+# 密钥：.env 不进 git，只放 .env.example 作示例
+.env
+.env.local
+
+# 备份与临时测试目录：本地工作产物，不入版本库
+/beifen/
+/ceshi/
+
+# AI 助手本地上下文：跨会话续接用，不进远程
+/.ai-context/
+
+# Flutter 额外构建产物（补全默认遗漏）
+.flutter-plugins
+**/Pods/
+**/.symlinks/
+
+# Claude Code 本机工作配置/缓存（个人本机产物，不进版本库）
+.claude/
+
