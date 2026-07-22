@@ -9,6 +9,14 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# 排除备份目录与选型实验 demo 目录的分析：
+# beifen/ 是历史备份（含中文文件名、误用模板，非本项目源码）；
+# ceshi/ 是阶段4 选型实验 demo 工程（独立 pubspec，非本项目源码）。
+analyzer:
+  exclude:
+    - "beifen/**"
+    - "ceshi/**"
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
@@ -17,7 +25,7 @@ linter:
   #
   # Instead of disabling a lint rule for the entire project in the
   # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
+  # or a specific file by using the `// ignore: name_of_lint` and
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:

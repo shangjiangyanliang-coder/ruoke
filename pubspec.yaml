@@ -30,6 +30,11 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # SDK 自带的国际化支持（不能走 pub.dev pub add，只能 sdk: flutter）。
+  # flutter_quill 等包依赖其 localization 委托。
+  flutter_localizations:
+    sdk: flutter
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -44,6 +49,7 @@ dependencies:
   shared_preferences: ^2.5.5
   path_provider: ^2.1.6
   json_annotation: ^4.12.0
+  uuid: ^4.6.0
 
 dev_dependencies:
   flutter_test:
