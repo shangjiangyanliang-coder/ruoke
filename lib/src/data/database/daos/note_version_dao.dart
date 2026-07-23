@@ -15,8 +15,8 @@ class NoteVersionDao extends DatabaseAccessor<AppDatabase>
     with _$NoteVersionDaoMixin {
   NoteVersionDao(super.db);
 
-  /// 写一条版本快照。
-  Future<int> insertVersion(NoteVersionEntity version) =>
+  /// 写一条版本快照（用 companion，Repository 直接传字段）。
+  Future<int> insertVersion(NoteVersionsCompanion version) =>
       into(noteVersions).insert(version);
 
   /// 按 noteId 列版本，新版本在前。
@@ -27,7 +27,17 @@ class NoteVersionDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// 取某版本号的快照。
+  /// 取某笔记当前最大版本号（无版本返回 0）。Repository 写新快照时用。
+  Future<int> maxVersionNo(String noteId) async {
+    final versions = await (select(noteVersions)
+          ..where((v) => v.noteId.equals(noteId))
+          ..orderBy([(v) => OrderingTerm.desc(v.versionNo)])
+          ..limit(1))
+        .get();
+    return versions.isEmpty ? 0 : versions.first.versionNo;
+  }
+
+  /// 取某版本号的快照（第4批回退用）。
   Future<NoteVersionEntity?> getByVersion(String noteId, int versionNo) {
     return (select(noteVersions)
           ..where((v) => v.noteId.equals(noteId))

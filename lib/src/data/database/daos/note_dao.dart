@@ -1,7 +1,6 @@
 // 文件: lib/src/data/database/daos/note_dao.dart
 // 作用: 笔记表的数据访问对象（DAO）。Repository 调 DAO，DAO 不被 ViewModel 直接碰。
-//       当前阶段（第1批）仅放骨架方法：插入、按 subject 列出、按 id 取、软删。
-//       第2批 LocalNoteRepository 实现里会扩充 watch/listVersions/create/update 等。
+//       第2批扩充：插入用 companion、列出全部、更新、取最大版本号（为写快照用）。
 //       详见技术方案 A §三 data/database/daos + B §五 Repository 接口约定。
 import 'package:drift/drift.dart';
 
@@ -15,8 +14,19 @@ part 'note_dao.g.dart';
 class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
   NoteDao(super.db);
 
-  /// 插入一条笔记，返回受影响行数。
-  Future<int> insertNote(NoteEntity note) => into(notes).insert(note);
+  /// 插入一条笔记（用 companion，可只填部分字段），返回受影响行数。
+  Future<int> insertNote(NotesCompanion note) => into(notes).insert(note);
+
+  /// 插入一条完整笔记（用 entity），返回受影响行数。
+  Future<int> insertNoteEntity(NoteEntity note) => into(notes).insert(note);
+
+  /// 列出全部未软删笔记，按更新时间倒序（列表/续学排序用）。
+  Future<List<NoteEntity>> listAll() {
+    return (select(notes)
+          ..where((n) => n.isDeleted.equals(false))
+          ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)]))
+        .get();
+  }
 
   /// 按 subject 列出未软删笔记（不含已删）。
   Future<List<NoteEntity>> listBySubject(String subjectId) {
@@ -29,6 +39,27 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
   /// 按 id 取一条（含软删，交由 Repository 决定是否过滤）。
   Future<NoteEntity?> getById(String id) {
     return (select(notes)..where((n) => n.id.equals(id))).getSingleOrNull();
+  }
+
+  /// 更新笔记的可变字段。只写非 absent 的字段。
+  Future<int> updateNote(
+    String id, {
+    String? title,
+    String? contentJson,
+    String? plainText,
+    bool? isDraft,
+    int? updatedAt,
+  }) {
+    return (update(notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(
+        title: title == null ? const Value.absent() : Value(title),
+        contentJson:
+            contentJson == null ? const Value.absent() : Value(contentJson),
+        plainText: plainText == null ? const Value.absent() : Value(plainText),
+        isDraft: isDraft == null ? const Value.absent() : Value(isDraft),
+        updatedAt: updatedAt == null ? const Value.absent() : Value(updatedAt),
+      ),
+    );
   }
 
   /// 软删：置 isDeleted=true + deletedAt=nowMs，不真删。

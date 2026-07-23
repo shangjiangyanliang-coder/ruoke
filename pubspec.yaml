@@ -50,6 +50,9 @@ dependencies:
   path_provider: ^2.1.6
   json_annotation: ^4.12.0
   uuid: ^4.6.0
+  # 富文本编辑器：阶段4 选型定案锁 11.5.1（super_editor/appflowy 均编译失败淘汰）。
+  # 注意 pub.dev 上的 2.0.7 不是我们验证过的版本，保持锁 11.5.1。
+  flutter_quill: ^11.5.1
 
 dev_dependencies:
   flutter_test:
