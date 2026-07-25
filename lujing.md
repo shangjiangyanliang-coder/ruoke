@@ -854,8 +854,180 @@ tables 6 + daos 6 + app_database + errors 2 + utils 2 + pubspec/analysis_options
 - Drift DAO 类型用要直 `import ... daos/xxx_dao.dart`，不指望 AppDatabase re-export
 - 插入用 companion、读取用 entity：DAO `insertNote(XxxCompanion)`、`select` 返回 `XxxEntity`
 - `flutter_localizations` 走 `sdk: flutter`；`flutter pub add flutter_quill` 指定 `:^11.5.1`
-- 真机验证清单（笔记 CRUD）：新建→写富文本→保存→列表可见→点开读出→删除消失，8 步眼睛盯
 - 改表/改 DAO 后跑 `dart run build_runner build`；改纯业务代码（无 Drift 注解）不需重跑
+
+
+---
+
+## 技术路径记录：2026-07-24 16:00（阶段5 第3批：笔记分级 书-章-节树 + 一键定级 + 科目管理页）
+
+### 1. 完成事项
+
+完成阶段5 第3批「笔记分级」：B1 书-章-节可折叠树、FAB 一键定级窗、App 首启 seed 示例科目、note 接真实 subjectId（defaultSubjectId 退役为未分类兜底）、简易科目管理页（增删书-章-节，单独 commit）。`flutter analyze` 全程全绿。真机 5 步核心验证通过。commit `9b00c60` + `f8604e1` + `8874ffd`。
+
+### 2. 初始条件与输入
+
+- 第 1/2 批已 commit（Drift 6 表基础 + 笔记 CRUD），branch `feature/notes-mvp`
+- 线框图 B1 已定义（书-章-节-笔记四级树 + FAB 定级弹窗 + 未分类兜底 + 进度条/V2）
+- 用户拍板：全量树（不做 MVP 减配）、App 首启 seed 示例科目、折叠态 ViewModel 持久、加简易科目管理页
+- Dart 3.12.2 sealed class analyzer 副作用已在第 2 批摸清（switch→if-else 规避），第 3 批沿用
+- subject 表/DAO 骨架第 1 批已建（insertSubject 收 entity, listAll, childrenOf）
+
+### 3. 技术方案选择
+
+#### 可折叠树 vs 平铺列表
+
+- 方案 A：Flutter `TreeView`（不内置，社区包）→ 包量太少、不满足 B1 线框的层级缩进+折叠箭头+笔记行混排
+- 方案 B：自写递归 `ExpansionTile` → Flutter 内置、原生折叠动画、嵌套渲染支持任意深度。但 `ExpansionTile.onExpansionChanged` 与 `Consumer` 结合时折叠态持存在 ViewModel 较可控
+
+最终选 B：自写递归 widget（`_BookTile`→`_ChapterTile`→`_SectionTile`→`_NoteRow`），每级用自定义 `_SubjectRow`（InkWell + 图标 + 箭头），展开/折叠通过 `SubjectTreeVm.toggleExpand(id)` 操作 `expandedIds` Set，`Consumer` watch 后 `.value.books` 取当前态重渲染。
+
+#### 选择原因
+
+- `ExpansionTile` 默认折叠态靠自身 State，与 Riverpod Consumer 切 tab 不重建的 indexedStack 偶发状态不同步（展开态"弹回"）
+- ViewModel 持 `Set<String> expandedIds` 能穿透 tab 切换且刷新不丢（`_load` 保留上次的 expandedIds）
+- 自写 tile 对图标/缩进/笔记行混排自由度最高，可精准对齐 B1 线框的缩进规则
+
+#### seed 时机与幂等
+
+- 方案 A：`main()` 中 ProviderScope 外用临时 `AppDatabase` 实例 seed 完关掉，ProviderScope 内 `appDatabaseProvider` 另外新建一个实例共享同一 .sqlite 文件
+- 方案 B：ProviderScope 内注册 seed 任务
+
+选 A。原因：seed 逻辑不应污染 Provider 初始化链；临时 db 实例 seed 完关掉，不走 Provider 闭包，简单安全；Drift 多实例同库无冲突。
+
+### 4. 详细实施路径
+
+#### 步骤 1：扩充 subject_dao + 重跑 build_runner
+
+- **目的**：DAO 增 `getById/softDelete/countChildren/totalCount`，insertSubject 改收 companion（对齐 note_dao 第2批经验）
+- **操作**：Write subject_dao 全文（加 countAll/selectOnly for count），`dart run build_runner build` 重生成
+- **输出**：drift 9 output 文件重新生成（subject_dao.g.dart），成功无报错
+
+#### 步骤 2：建 Subject 领域模型 + Repository
+
+- **目的**：SubjectEntity→Subject 纯 Dart 模型 + SubjectRepository 接口 + LocalSubjectRepository（Drift 实现）
+- **操作**：建 `models/subject.dart`（fromEntity + levelLabel）、`repository/subject_repository.dart`（接口 7 方法）、`repository/local_subject_repository.dart`（Drift 实现，guard+translator）
+- **关键细节**：`SubjectRepository.isEmpty()` 返回 `bool` 判空（seed 幂等），`countChildren(String? parentId)` 判叶/判空
+- **Provider**：`providers.dart` 加 `subjectRepositoryProvider`（注入 appDatabaseProvider）
+
+#### 步骤 3：建 SubjectTreeVm（书-章-节嵌套树 + 折叠态）
+
+- **目的**：把扁平 subject list + note list 在内存构造成嵌套树
+- **数据类**：`SubjectTreeNode`（subject + children + notes）、`SubjectTreeState`（books + uncategorized notes + expandedIds + uncategorizedExpanded）
+- **构造算法**：`_buildTree`：按 parentId 映射 → 递归 `buildNode` 从书 level0 起构子树 → 笔记按 subjectId 分组挂对应节点 → 对指向不存在科目或 defaultSubjectId 的笔记入 uncategorized
+- **折叠态**：`toggleExpand(id)` 写 `state = AsyncData(cur.copyWith(expandedIds: next))`；`_load` 刷新时保留上次 expandedIds（空则首次默认展开所有书级节点）
+
+#### 步骤 4：首启 seed 示例科目树
+
+- **目的**：App 首启插入物理（3 章）+ 英语（2 章），让 B1 树立即可看效果
+- **文件**：`data/database/seed/subject_seed.dart`
+- **幂等**：`SubjectSeed.runIfEmpty()` 调 `SubjectDao.totalCount()`，仅 0 才 seed
+- **调用**：`main()` 里 `ProviderScope` 前用临时 `AppDatabase()` 跑 seed（容错例外：`try-catch` + `debugPrint` 不打断启动）
+- **关键坑**：`SubjectsCompanion` 是生成类，不在 `package:drift/drift.dart` 里，要将 `import 'package:drift/drift.dart' show Value, SubjectsCompanion;` 改为只 `show Value`，让 SubjectsCompanion 从 `app_database.dart` 的 part 来
+
+#### 步骤 5：B1 树 View（note_list_view 重写）
+
+- **目的**：将第2批平铺列表升级为可折叠四级树
+- **结构**：`NoteListView(ConsumerWidget)` → `_BookTile(ConsumerWidget)` → `_ChapterTile(ConsumerWidget)` → `_SectionTile(ConsumerWidget)` → `_NoteRow(ConsumerWidget)`，每级用 `_SubjectRow` 渲染科目行
+- **缩进规则**：`padding: EdgeInsets.only(left: 16.0 + depth * 16)`
+- **笔记行**：`_NoteRow` 为 ConsumerWidget（点进编辑器、删除调 `subjectTreeVmProvider.notifier.softDeleteNote(id)`、返回 refresh）
+- **未分类组**：树底部 `_UncategorizedTile(ConsumerWidget)`，可折叠
+
+#### 步骤 6：FAB 定级窗（subject_picker_dialog）
+
+- **目的**：FAB + 弹出定级窗选书/章/节，选完后带 subjectId 进编辑器
+- **实现**：`showSubjectPickerDialog(context, ref)` → 拉 `subjectTreeVmProvider.value.books` 扁平化 → `AlertDialog` + `ListView` 含层级缩进图标
+- **关键变更**：`RadioListTile.groupValue/onChanged` deprecated（Flutter 3.32）→ 改用 `ListTile` + 选中态 `Check` 图标 + `onTap` 单选
+
+#### 步骤 7：编辑器 subjectId 及路由 query
+
+- **目的**：新建笔记时保存选定的 subjectId
+- **改动链**：`app_router.dart` 编辑器路由加 `?subjectId=` query → `NoteEditorView` 加 `subjectId` 参数 → `init(noteId, subjectId:)` 带进 `NoteEditorState.subjectId` → `save()` 用 `cur.subjectId ?? defaultSubjectId` 建笔记
+
+#### 步骤 8：简易科目管理页（单独 commit）
+
+- **目的**：我的 tab 加学科管理入口，实现增删书-章-节
+- **文件**：`SubjectManageVm`（AsyncNotifier+create/delete）+ `subject_manage_view.dart`（扁平缩进列表+FAB 新建弹窗选 level+父节点）+ `settings_view.dart`（替换 placeholder）+ 路由 `/settings/subjects`
+- **新建弹窗**：`StatefulBuilder` 内选择 level（0/1/2），level>0 显示父节点下拉（过滤仅 level≤1 科目），调 `SubjectManageVm.create(name,level,parentId)`
+- **删旧**：确认弹窗 → `SubjectManageVm.delete(id)` → 刷新 B1 树
+
+### 5. 核心技术细节
+
+- **内存树构造**：`byParent[subject.parentId]` 分组 → 从 parentId=null 的 level0 开始递归 `buildNode(s)`。节点本身也有 `notes`（B1 线框支持整本/整章笔记——subject_id 指向书或章而非节）。未分类=subjectId==defaultSubjectId 或不在 validIds 中。
+- **折叠态跨 tab 保**：`SubjectTreeState.expandedIds: Set<String>` 由 VM `toggleExpand` 维护；`_load` 刷新时保留 `prev.expandedIds`（首次用 `tree.books.map(id).toSet()` 默认展所有书）。`Consumer.watch` 的 `value` 每次刷新重建 ViewModel → View 用新 data 渲染，但 expandedIds 已保留。
+- **seed 幂等**：`SubjectDao.totalCount()` → `selectOnly(subjects)..addColumns([countAll()])`，仅 0 才插。临时 AppDatabase 跑 seed close 掉，ProviderScope 另建新实例共享 .sqlite。
+- **SubjectsCompanion 来源**：`app_database.g.dart` 生成 → `app_database.dart` 通过 `part 'app_database.g.dart'` 暴露。外部文件不应 `show Value, SubjectsCompanion`（SubjectsCompanion 不在 drift package），只 `show Value` 加另 import app_database 即可。
+- **DropdownButtonFormField deprecation**：Flutter 3.33+ 的 `value` → `initialValue`（一次性初始值，后续状态由 `onChanged` 驱动）。与 `StatefulBuilder` + `setState` 搭配实现内部值更新。
+- **V2 未改名**：SubjectRepository 缺少 rename 方法，管理页改名栏留"待 V2 补充"提示。如需急着改名，可用 `create(新)+softDelete(旧)` 变通（副作用是笔记关联需迁移，暂不这样做）。
+- **`final class` vs `sealed class` 避坑延续**：第3批所有 Result 解包沿用 if-else `is Success/Failure`，不碰 switch sealed（Dart 3.12.2 analyzer bug）。
+
+### 6. 文件与资源变更
+
+| 文件或资源 | 操作 | 具体内容 | 作用 |
+|---|---|---|---|
+| `data/database/daos/subject_dao.dart` | 修改 | insertSubject 收 companion + countChildren/totalCount/softDelete/getById | 树查询+seed 判空 |
+| `data/database/seed/subject_seed.dart` | 新建 | 幂等 seed 示例科目（物理3章+英语2章） | 首启有树看 |
+| `features/notes/models/subject.dart` | 新建 | Subject 领域模型(levelLabel) | 数据解耦 |
+| `features/notes/repository/subject_repository.dart` | 新建 | 接口 7 方法 | 存储抽象 |
+| `features/notes/repository/local_subject_repository.dart` | 新建 | Drift 实现 | 本地存储 |
+| `features/notes/providers.dart` | 修改 | 加 subjectRepositoryProvider | DI |
+| `features/notes/view_model/subject_tree_view_model.dart` | 新建 | 扁平→嵌套树 + 折叠态 + softDelete | B1 树 VM |
+| `features/notes/view_model/subject_manage_view_model.dart` | 新建 | 扁平列表 + create/delete | 管理页 VM |
+| `features/notes/view_model/view_model_providers.dart` | 修改 | 加 subjectTreeVmProvider + subjectManageVmProvider | DI |
+| `features/notes/view/note_list_view.dart` | 修改 | 平铺→B1 可折叠树 | UI |
+| `features/notes/view/subject_picker_dialog.dart` | 新建 | FAB 定级窗（单选+未分类兜底） | 建笔记取 subjectId |
+| `features/notes/view/subject_manage_view.dart` | 新建 | 管理页（增删新建弹窗） | 科目管理 |
+| `routing/settings_view.dart` | 新建 | 我的tab→学科管理入口 | 入口 |
+| `routing/app_router.dart` | 修改 | 编辑器路由 +?subjectId=/settings/subjects | 路由 |
+| `features/notes/view/note_editor_view.dart` | 修改 | 接受 subjectId 参数 | 路由→VM |
+| `features/notes/view_model/note_editor_view_model.dart` | 修改 | init 加 subjectId 参数 + save 用它 | VM |
+| `features/notes/note_constants.dart` | 修改 | 注释：defaultSubjectId 退役为未分类兜底 | 常量 |
+| `lib/main.dart` | 修改 | 首启 `SubjectSeed.runIfEmpty`（临时 db+容错） | seed 入口 |
+
+git commits：`9b00c60 feat: 笔记分级-书章节树+一键定级`（16 文件 +1059 行）、`f8604e1 feat: 简易科目管理页`（5 文件 +384 行）、`8874ffd docs: 第3批真机验证待办F1.1.11-F1.1.15`（1 文件 +5 行）
+
+### 7. 问题、尝试与解决过程
+
+#### 问题 1：DropdownButtonFormField `value` deprecated
+
+- **表现**：analyze 报 `deprecated_member_use: value → use initialValue`
+- **原因判断**：Flutter 3.33+ 将 `value` 属性改名为 `initialValue`（更准确描述行为——这是一次性初始值，后续值由 StatefulBuilder 内的 setState 维护）
+- **最终处理**：`value: level` → `initialValue: level`，同改 parentId 下拉
+- **处理结果**：analyze 通过
+
+#### 问题 2：SubjectsCompanion undefined_shown_name
+
+- **表现**：`show Value, SubjectsCompanion` 报 `undefined_shown_name`
+- **原因判断**：SubjectsCompanion 是 Drift 生成类（在 `app_database.g.dart`），不在 `package:drift/drift.dart` 的导出符号里
+- **处理**：删掉 show 里的 SubjectsCompanion，靠 import app_database.dart 拿
+- **处理结果**：analyze 通过。经验：Drift 生成的各种表专有类（XxxCompanion, XxxEntity）一律从 app_database 拿，不要 show 到 drift package
+
+#### 问题 3：真机验证发现 5 条待办
+
+- **F1.1.11 节加展开按钮**：节行无折叠图标（`onTap: null`），用户要求节也能折叠。根因：设计时以为节为叶节点（level2=叶），但实际有节下大量笔记需折叠。已登记待办。
+- **F1.1.12 定级窗层级选**：当前所有节点平铺单选，书多后繁琐。应改为级联选。已登记待办。
+- **F1.1.13 新建笔记残留**：新建时 `_ensureControllers` 检查 `if (_controller != null) return;`，所以退出再进时 QuillController(s) 没清，旧内容保留。根因：`_NoteEditorViewState` 未在 `initState` 时重置 controller。已登记待办。
+- **F1.1.14 编辑器首次转圈**：首启 seed 写在 ProviderScope 外、`runApp` 前，但编辑器 `init(noteId)` 调异步 Provider→Repository→DAO，如果 ProviderScope 内的 appDatabaseProvider 创建实例与 seed 有少许时序重叠（或 DB 文件锁），第一次 Watch/Read 可能 loading 态卡住，退出再进时 Provider 已缓好。根因待排查：疑似 Flutter 首次构建 Widget 时 Riverpod AsyncNotifier 初始化未就绪。已登记待办。
+- **F1.1.15 文件夹系统**：用户要求书(level0)之上加多级文件夹，类似 Windows 文件夹系统。设计层面需考虑 subject 表扩展或新建 folder 表，与当前 0/1/2 三层模型冲突。已登记待办（先 V2 再细化设计）。
+
+### 8. 验证方法与结果
+
+- `flutter analyze`：全程全绿（No issues found），3 次复跑确认
+- 真机 PJF110 `flutter run`：编译成功 + 装机成功 + 首次启动 seed 执行成功
+- 真机人机验证（5 步通过）：B1 树展开/折叠、FAB 定级窗①选节点②弹出来③点新建④save⑤返回看见挂对位置、树上笔记右侧删除确认后消失
+- 切 tab（首页→笔记）折叠态保留 ✅
+- **未验证内容**：科目管理页新建/删除（真机待验证——已纳入第4批前人工单独验证）；编辑器首次转圈 bug（已登记）。进度条/复习量（F1.21，需 review_card 表，非本批范围）
+
+### 9. 可复现要点
+
+- SubjectsCompanion 从 app_database.dart 拿，不要 show 到 drift 包（dart analyze 会报 undefined_shown_name）
+- DropdownButtonFormField 用 `initialValue` 非 `value`（Flutter 3.33+ deprecated）
+- 折叠态跨 tab 保需要 ViewModel 持有 `expandedIds` + `Consumer.watch`，不能只用 ExpansionTile 自身 State
+- seed 临时建 `AppDatabase()` 跑完 `close()`（别在 ProviderScope 内做，时序重叠可能与 Provider 的 appDatabaseProvider 首次懒取冲突→编辑页首次转圈，根因待查 F1.1.14）
+- `RadioListTile.groupValue/onChanged` deprecated → 用 `ListTile` + 选中态图标 + `onTap` 单选
+- 表全量 seed 幂等检查用 `selectOnly(table)..addColumns([countAll()])`，非 `select(table).get().length`
+- 重命名未实现（Repository 无 rename），写代码时避开调不存在的 API
+
 
 
 
