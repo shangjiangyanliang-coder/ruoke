@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 
 import '../features/notes/view/note_editor_view.dart';
 import '../features/notes/view/note_list_view.dart';
+import '../features/notes/view/subject_manage_view.dart';
 import 'placeholder_page.dart';
+import 'settings_view.dart';
 
 /// 全局路由配置。由 main.dart 或 ProviderScope 注入 MaterialApp.router。
 final GoRouter appRouter = GoRouter(
@@ -68,14 +70,17 @@ final GoRouter appRouter = GoRouter(
             ),
           ),
         ]),
-        // tab4 我的（占位）
+        // tab4 我的（设置，含学科管理入口）
         StatefulShellBranch(routes: [
           GoRoute(
             path: '/settings',
-            builder: (context, state) => const PlaceholderPage(
-              title: '我的',
-              hint: '设置（待开发）',
-            ),
+            builder: (context, state) => const SettingsView(),
+            routes: [
+              GoRoute(
+                path: 'subjects',
+                builder: (context, state) => const SubjectManageView(),
+              ),
+            ],
           ),
         ]),
       ],
