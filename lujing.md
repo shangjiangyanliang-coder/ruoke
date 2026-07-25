@@ -568,5 +568,296 @@ OCR 选型实验的任务 #6 起步：创建 `ceshi/ocr_mlkit/` demo 工程，�
 - OCR Repository 设计时本地/远程接口可切换（决策"Repository 标本地/远程可换"），联网优先云端、断网回退 mlkit 是 V2 集成时的实现方向
 
 
+---
+
+## 技术路径记录：2026-07-21 19:30（阶段5 第1批：数据库底座）
+
+### 1. 完成事项
+
+完成阶段5 第1批"地基底座"：Drift 数据库 + 6 张笔记表 + 6 DAO 骨架 + errors + utils。`flutter analyze` 全绿。切 `feature/notes-mvp` 分支，commit `caeba4f`。
+
+### 2. 初始条件与输入
+
+- Flutter 3.44.4 / Dart 3.12.2，主项目只有 `lib/main.dart` 空壳
+- pubspec 已有 riverpod/drift/go_router 等依赖，缺 uuid、flutter_localizations
+- git 干净，master = `6e71465`
+
+### 3. 技术方案选择
+
+按 B 文档只建第 2 批需要的 6 张笔记表（非全部 18 张），schemaVersion=1，后续模块逐次追加。
+
+### 4. 实施路径
+
+1. `flutter pub add uuid`；手改 pubspec 加 `flutter_localizations: sdk: flutter`
+2. 6 张 Drift 表：subject（自引用树，level 0/1/2，软删）、note（content_json + 派生 plain_text + 软删）、note_version（快照）、note_highlight（kind=red/underline，body 列避开 Table.text 冲突）、tag（name 唯一）、note_tag（复合主键）
+3. 6 个 DAO（DriftAccessor）+ AppDatabase 入口（drift_flutter 后台 isolate，schemaVersion=1）
+4. `data/errors/`：AppException sealed + Result<T> + guard()
+5. `utils/`：newId() uuid v4、nowMs()/fromMs() 毫秒时间戳
+6. fluter analyze → 4 坑修完全绿 → commit `caeba4f`
+
+### 5. 关键技术细节
+
+- Drift 列名不能用 `text`——Table 基类有同名方法
+- OrderingTerm 用位置参数 `asc(expr)`/`desc(expr)` 而非 `expression:` 命名参数
+- schemaVersion getter 必须实现
+- analysis_options 排除 beifen/ceshi 防备份 Dart 文件被扫到
+
+### 6. 文件变更（15 个新文件）
+
+tables 6 + daos 6 + app_database + errors 2 + utils 2 + pubspec/analysis_options 修改
+
+### 7. 问题与处理
+
+4 个坑：uuid 重复（pub add 手加重复→删手加行）/ text 列冲突（改名 body）/ OrderingTerm 语法（改位置参）/ schemaVersion 缺实现（补 override）
+
+### 8. 验证结果
+
+`flutter analyze` 全绿，build_runner 28 outputs。未真机验证（纯数据层无 UI）。
+
+### 9. 可复现要点
+
+- DriftAccessor 须 `part 'xxx.g.dart'` + 注解，改后重跑 build_runner
+- pub add 后手改 pubspec 前先 grep 去重
+
+
+---
+
+## 技术路径记录：2026-07-22 00:00（阶段5 第2批起步：笔记 CRUD + 富文本编辑器 — 未完成，卡在 riverpod 生成器兼容）
+
+### 1. 完成事项
+
+第 2 批写完全部功能代码文件（models/repository/ViewModel/View/路由），但卡在 **riverpod_generator 4.x + riverpod 3.x 注解兼容**导致 `flutter analyze` 未全绿，代码未跑真机。
+
+### 2. 初始条件
+
+- 第 1 批已 commit，branch feature/notes-mvp
+- 线框图集 B1/B1.a 已定；用户选择工具栏 A（加粗/斜体/下划线/红字/删除线/列表/H1/H2）
+- 用户确认：功能优先、UI 最小占位
+
+### 3. 技术方案选择 — 关键分歧
+
+**riverpod 生成器 bug**：
+
+| 尝试 | 写法 | 结果 |
+|---|---|---|
+| ① @riverpod class XxxVm | 2.x 旧 Notifier 写法 | InvalidTypeException |
+| ② @riverpod Future<T> f(Ref ref) | 4.x 新函数式 | 同样 InvalidTypeException |
+| ③ 手写 FamilyAsyncNotifier<T, Arg> | 不依赖 generator | 3.x 移除了 FamilyAsyncNotifier 类 |
+| ④ 手写 AsyncNotifier + init(arg) | 绕开 family | analyze 有 valueOrNull 等 API 差异未解 |
+
+最终选择 ④（手写 AsyncNotifier + init 传 arg），仍待 analyze 全绿。
+
+### 4. 已建文件
+
+- `pubspec` 加 flutter_quill ^11.5.1（pub add 误装 2.0.7 已改回）
+- `notes/models/note.dart` / `note_version.dart` — 领域模型
+- `notes/note_constants.dart` — 占位科目常亮
+- `notes/repository/note_repository.dart` — 抽象接口
+- `notes/repository/local_note_repository.dart` — Drift 实现，含快照
+- `notes/view_model/note_list_view_model.dart` — AsyncNotifier hand-rolled
+- `notes/view_model/note_editor_view_model.dart` — AsyncNotifier + init(noteId)
+- `notes/view_model/view_model_providers.dart` — Provider 声明
+- `notes/providers.dart` — appDatabase + noteRepository 手写 Provider
+- `notes/view/note_list_view.dart` — 列表页 ConsumerWidget
+- `notes/view/note_editor_view.dart` — 编辑器 ConsumerStatefulWidget
+- `routing/app_router.dart` — go_router StatefulShellRoute 5 tab
+- `routing/placeholder_page.dart` — 未开发 tab 占位
+- `lib/main.dart` — 升级：FlutterQuillLocalizations + appRouter
+- `data/database/daos/note_dao.dart` + `note_version_dao.dart` 扩充
+- `utils/delta_plain_text.dart` — 富文本→纯字
+
+### 5. 核心技术发现
+
+**riverpod 3.3.2 + generator 4.0.4 组合有已知 bug**：generator 对 `@riverpod` 注解生成时抛 `InvalidTypeException`，可能与 riverpod_annotation 4.0.3 不兼容。建议降 generator 到 2.x 或全手写。
+
+`FamilyAsyncNotifier` 在 3.x 中不存在，family 须通过 Provider 声明结合普通 AsyncNotifier 实现。
+
+### 6. 问题与当前状态
+
+**核心问题**：riverpod 生成器/手写 API 差异，下一会话应：
+
+1. **优先方案**：pubspec 删 `riverpod_generator` + `riverpod_annotation`，全项目手写 Provider/AsyncNotifier，核实 3.3.2 AsyncValue API（查 `valueOrNull` 是否存在还是改用别的 getter）
+2. **备选**：降 riverpod 到 2.x（更稳妥但可能连锁影响其他依赖）
+
+当前 git 16 个文件 untracked + 7 个文件 modified，未 commit。
+
+### 7. 可复现要点
+
+- `flutter pub add flutter_quill` 必须指定版本 `:^11.5.1`
+- 第 2 批代码**未 verify**,恢复后先跑 analyze 定位问题再改
+
+
+
+---
+
+## 技术路径记录：2026-07-23 14:00（阶段5 第2批：笔记 CRUD + 富文本编辑器 — analyze 全绿 + 真机验证）
+
+### 1. 完成事项
+
+完成阶段5 第2批「笔记 CRUD + 富文本编辑器」：写全 notes feature（models / Repository 接口+本地实现 / 手写 AsyncNotifier ViewModel / 列表页 + 编辑器 flutter_quill / go_router 5tab 底栏）、扩充 2 个 DAO、`flutter analyze` 从 29 issue 修到 No issues found、真机 PJF110 8 步验证通过、commit `7c313d9`。同时更正前会话误判的「riverpod 兼容 bug」根因。
+
+### 2. 初始条件与输入
+
+- 第 1 批已 commit `caeba4f`（Drift 6 表 + 6 DAO 骨架 + errors + utils），branch `feature/notes-mvp`
+- 线框图集 B1（列表）/ B1.a（编辑器）交互已定；用户选工具栏 A（加粗/斜体/下划线/红字/删除线/列表/H1/H2）
+- 用户确认：功能优先、UI 最小占位、保存手动点才写库
+- 16 个 untracked + 7 个 modified 文件已写但 `flutter analyze` 报 29 个问题未闭环
+- 技术栈：Flutter 3.44.4 + Dart 3.12.2，Riverpod 3.3.2，Drift 2.34.2，flutter_quill 11.5.1，go_router 17.3
+- 前会话 HANDOFF 把卡点记成「riverpod_generator 4.0.4 + riverpod 3.3.2 兼容 bug」，并据此已改手写 AsyncNotifier
+
+### 3. 技术方案选择
+
+#### 可选方案
+
+- **方案 A**：降 riverpod_generator 到 2.x，改回 `@riverpod` 注解生成
+- **方案 B**：全手写 Provider/AsyncNotifier，彻底不依赖 generator（会话开始时代码已是手写）
+- **方案 C**：升级 riverpod 到兼容 generator 4.x 的新版
+
+#### 最终选择
+
+方案 B：保持手写 Provider/AsyncNotifier，且**不改 riverpod 版本**——因后续排查发现报错真因不是 generator 兼容 bug，而是相对路径 + AsyncValue API 改名 + sealed analyzer 副作用，与 generator 无关。
+
+#### 选择原因
+
+- 报错根因排查后确认与 generator 注解无关（generator 全程 no-op，项目无 `@riverpod` 注解），降/升 generator 解决不了现有报错
+- 手写 Provider 已写就，零迁移成本，且 riverpod 3.x 手写 AsyncNotifier API 稳定
+- 改 riverpod 版本会连锁影响其它依赖，风险高收益零
+
+### 4. 详细实施路径
+
+#### 步骤 1：跑 flutter analyze 拿全量报错分类
+
+- **目的**：定位 29 个问题的真实类别，不盲改
+- **操作**：`flutter analyze` → 读输出分 3 类：①`uri_does_not_exist`/`undefined_class` 级联 ②`valueOrNull` 未定义 ③Dead code 警告
+- **输出**：29 issue 清单，发现 `uri_does_not_exist` 级联集中在 4 个 import 了 `data/database` 的文件
+
+#### 步骤 2：确认 riverpod 3.3.2 AsyncValue API
+
+- **目的**：核实 `valueOrNull` 是否改名
+- **操作**：grep `D:\PubCache\hosted\pub.dev\riverpod-3.3.2\lib\src\core\async_value.dart`
+- **关键发现**：3.x 移除 `valueOrNull`，改为 `value`（返回 `ValueT?`，语义一致）。全项目约 5 处需改
+
+#### 步骤 3：单文件 analyze 二分定位 `uri_does_not_exist` 真因
+
+- **操作**：分别 `dart analyze` 单文件
+- **关键发现**：
+  - `app_database.dart` 单独 analyze → 全绿（它有 `part 'app_database.g.dart'`，上下文完整）
+  - `note.dart` 单独 analyze → 仍报 `uri_does_not_exist` 指向真实存在的 `app_database.dart`
+  - `main.dart`/`app_router.dart` 不 import 生成符号 → 全绿
+- **这一步排除了"生成代码不同步"假设**，把怀疑指向相对路径本身
+
+#### 步骤 4：核对相对 import `..` 层数（定位真凶）
+
+- **操作**：逐文件数 `..` 与目录深度的对应关系
+- **结果**：
+  - `note.dart`/`note_version.dart`（在 `features/notes/models/`）→ `src/data/database/` 应 3 个 `..`，代码写了 2 个 ❌
+  - `providers.dart`（在 `features/notes/`）→ repository 是同级子目录，应 0 个 `..` 直接 `repository/...`，代码写了 `../repository/` ❌
+  - `local_note_repository.dart` 已 3 个 `..` 正确，但缺 DAO 直 import（`NoteDao` 在 `daos/note_dao.dart`，不从 AppDatabase re-export）
+
+#### 步骤 5：修路径 + 改 valueOrNull + 改 switch
+
+- **操作**：
+  1. `note.dart`/`note_version.dart`：`'../../data/...'` → `'../../../data/database/app_database.dart'`
+  2. `providers.dart`：`'../../../data/...'` → `'../../data/database/app_database.dart'`；`'../repository/...'` → `'repository/...'`
+  3. `local_note_repository.dart`：补 `import ... daos/note_dao.dart` + `note_version_dao.dart`
+  4. 2 个 ViewModel + editor_view：`valueOrNull` → `.value`
+  5. 2 个 ViewModel：`switch(r){case Success(:final value)...}` → `if(r is Success) ... else throw (r as Failure).exception`（绕 Dart 3.12.2 sealed analyzer 副作用）
+- **每改一步跑一次 analyze 验证级联减少**
+
+#### 步骤 6：修 DAO insertNote 签名 + 清 warning
+
+- **问题**：`local_note_repository.dart:63` 报 `argument_type_not_assignable`——`insertNote(NotesCompanion(...))` 但 DAO 签名收 `NoteEntity`
+- **操作**：改 `note_dao.dart` 的 `insertNote` 收 `NotesCompanion`（加 `insertNoteEntity` 备用 entity 版）
+- **清 warning**：删未用字段 `_noteId`、改 `(_, __)` → `(_, _)`、去掉 `if (r is Success)` 后的多余 cast
+
+#### 步骤 7：重跑 build_runner 同步生成代码
+
+- **操作**：`dart run build_runner build`（50s，77 outputs）
+- **说明**：实为排除性验证——build_runner 后报错纹丝不动，反向确认真因不是生成代码不同步；riverpod_generator 全 no-op 印证手写 Provider 无注解依赖
+
+#### 步骤 8：commit + 真机验证
+
+- **操作**：`git add` 19 文件（不带 lujing.md）→ `git commit -m "feat: 笔记 CRUD + 富文本编辑器"` → commit `7c313d9`
+- **真机**：唤醒 PJF110 → `adb devices` 见 9d306d62 → `flutter run -d 9d306d62` 编译装真机
+- **人机验证（8 步全通过）**：新建→写富文本(加粗/下划线/红字)→保存提示"已保存"→返回列表可见→点开读出保留格式→删除从列表消失 ✅
+- **发现待办并登记**：新建空笔记直接退出会生成空标题空内容笔记 → 登记产品需求清单 F1.1.10，当前不修
+
+### 5. 核心技术细节
+
+- **`uri_does_not_exist` 级联的真因**：相对 import `..` 数错。`..` 的次数 = 当前文件到 `lib/src/` 根要回退的目录层数。`features/notes/models/` 到 `src/` 是 3 层（models→notes→features→src），故到 `data/...` 应 3 个 `..`。写错后 analyzer 无法解析目标文件，连带报该文件所有符号 `undefined_*`，形成"一个错变十几个错"的级联假象，极易误判为框架版本兼容问题
+- **单文件 analyze 二分法**：`dart analyze <单文件>` 能快速区分"文件自身问题"vs"级联污染"。本次靠它确认 `app_database.dart` 自身全绿而 `note.dart` 报错，把怀疑从"生成代码"转向"相对路径"
+- **Dart 3.12.2 sealed class + analyzer 副作用**：`switch(sealed) { case Sub(:final x): ... }` 模式匹配在某些写法下触发 `dead_code` 警告与子类型 extractor 行为异常。规避法：改 `if (r is Success) { use r.value } else { throw (r as Failure).exception }`。注意 `if (r is Success)` 后 r 已收窄为 Success，**直接用 `r.value` 无需再 cast**（否则 `unnecessary_cast`）
+- **riverpod 3.3.2 AsyncValue API**：3.x 移除 `valueOrNull`，用 `.value`（`ValueT?`）。`.requireValue` 用于确信有值时取值（loading/error 时抛错）。`AsyncValue.guard(_fn)` 包异步建值
+- **Drift DAO 不从 AppDatabase re-export**：DAO 类定义在 `daos/xxx_dao.dart`，`AppDatabase` 只通过 `@DriftDatabase(daos:[...])` 暴露 `db.xxxDao` 实例 getter，不暴露类型。外部要用 `NoteDao` 类型必须直 `import ... daos/note_dao.dart`
+- **Drift Companion vs Entity**：`into(t).insert(companion)` 收 `XxxCompanion`（可部分字段），`insert(entity)` 收 `XxxEntity`（须完整）。Repository 新建用 companion 合理（insert 前无完整 entity），故 DAO `insertNote` 签名收 companion
+- **flutter_quill 11.5.1 在主项目集成要点**（沿用 demo 验证结论）：工具栏 `showUnderLineButton`/`showStrikeThrough`（无 Button 后缀）/`showListBullets`+`showListNumbers`；序列化 `controller.document.toDelta().toJson()` ↔ `Document.fromJson(jsonDecode(...))`，纯字 `doc.toPlainText()`；乎乎续集在 main.dart 注册 `FlutterQuillLocalizations.delegate`
+
+### 6. 文件与资源变更
+
+| 文件或资源 | 操作 | 具体内容 | 作用 |
+|---|---|---|---|
+| `features/notes/models/note.dart` | 修改 | 相对路径 `..` 修成 3 个 | 解 uri_does_not_exist |
+| `features/notes/models/note_version.dart` | 修改 | 同上 | 同上 |
+| `features/notes/providers.dart` | 修改 | `..` 修成 2 + repository 去 `..` | 同上 |
+| `features/notes/repository/local_note_repository.dart` | 修改 | 补 DAO 直 import | 解 NoteDao/NoteVersionDao undefined |
+| `features/notes/view_model/note_editor_view_model.dart` | 修改 | valueOrNull→.value + switch→if-else + 删 _noteId + 清 cast | 解 5 类 |
+| `features/notes/view_model/note_list_view_model.dart` | 修改 | valueOrNull→.value + switch→if-else + 清 cast | 同上 |
+| `features/notes/view/note_editor_view.dart` | 修改 | valueOrNull→.value | 解 1 处 |
+| `data/database/daos/note_dao.dart` | 修改 | insertNote 收 companion | 解 argument_type_not_assignable |
+| `features/notes/view/note_list_view.dart` | 修改 | `(_, __)`→`(_, _)` | 清 unnecessary_underscores |
+| `jihua/ruoke-产品待办需求清单-20260713.md` | 修改 | 加 F1.1.10 空笔记不残留 | 登记待办 |
+| git commit `7c313d9` | 新建 | feat: 笔记 CRUD + 富文本编辑器（19 文件 +1386） | 第 2 批存档 |
+
+### 7. 问题、尝试与解决过程
+
+#### 问题 1（最大）：29 个报错被误判为「riverpod 兼容 bug」
+
+- **表现**：`uri_does_not_exist` ×13 + `undefined_*` ×多 + `valueOrNull` ×5 + Dead code ×多，前会话归因为 generator 4.x 与 riverpod 3.x 不兼容
+- **原因判断**：误判。真因是 3 个文件相对 import `..` 数错 → 级联未解析符号；叠加 riverpod 3.x `valueOrNull` 改名、Dart 3.12.2 sealed analyzer 副作用
+- **尝试过的方法**：①清 `.dart_tool` 缓存重跑 analyze（无效，排除缓存）②重跑 build_runner（无效，排除生成代码不同步）③单文件 `dart analyze` 二分（关键：发现 app_database.dart 独立全绿而 note.dart 报错）
+- **无效方法**：清缓存、重跑生成——都治不了相对路径写错
+- **最终处理**：逐文件核对 `..` 层数修正，29 issue → 15 → 5 → 0
+- **处理结果**：analyze No issues found
+
+#### 问题 2：insertNote 参数类型不匹配
+
+- **表现**：`argument_type_not_assignable: NotesCompanion 不能赋给 NoteEntity 参数`
+- **原因判断**：DAO `insertNote(NoteEntity)` 但 Repository 调用方传 `NotesCompanion`
+- **最终处理**：改 DAO `insertNote` 收 `NotesCompanion`
+- **处理结果**：通过
+
+#### 问题 3：真机空笔记残留（已登记待办，未修）
+
+- **表现**：新建笔记不写任何内容直接退出，仍生成空标题空内容笔记
+- **原因判断**：当前 `createEmpty` 一进编辑器就 create 一条草稿行，退出不回收
+- **处理**：登记产品需求清单 F1.1.10，当前不修（用户决定以后修复）
+
+### 8. 验证方法与结果
+
+- `flutter analyze`（最终）：No issues found ✅
+- 真机 PJF110 `flutter run -d 9d306d62`：编译成功 + 装机成功 + 应用启动 ✅
+- 人机 8 步验证（用户真机操作）：全通过 ✅
+  - 5tab 底栏显示、默认落笔记 tab
+  - 空列表提示、FAB 新建
+  - 编辑器顶栏 + flutter_quill 工具栏可用
+  - 写富文本(加粗/下划线/红字) → 保存提示"已保存"
+  - 返回列表可见新笔记 → 点开读出保留格式
+  - 删除确认后从列表消失
+- **未验证内容**：编辑器长期使用下 Delta JSON 持久化稳健性（需多次往返验证，未做）、MVP 范围外功能
+
+### 9. 可复现要点
+
+- 排查 `uri_does_not_exist` 级联第一直觉：**先数相对 import `..` 对不对**（`..` 数 = 当前文件回退到 `lib/src/` 的目录层数），别急着归咎框架版本兼容
+- 用 `dart analyze <单文件>` 二分：目标文件单独全绿 → 基本是级联污染，往"谁导入了它"方向查
+- riverpod 3.x 取异步值可空用 `.value`（非 `valueOrNull`），确信有值用 `.requireValue`
+- 绕 Dart 3.12.2 sealed analyzer 副作用：`if (r is Success) r.value else throw (r as Failure).exception`，收窄后别再 cast（否则 unnecessary_cast）
+- Drift DAO 类型用要直 `import ... daos/xxx_dao.dart`，不指望 AppDatabase re-export
+- 插入用 companion、读取用 entity：DAO `insertNote(XxxCompanion)`、`select` 返回 `XxxEntity`
+- `flutter_localizations` 走 `sdk: flutter`；`flutter pub add flutter_quill` 指定 `:^11.5.1`
+- 真机验证清单（笔记 CRUD）：新建→写富文本→保存→列表可见→点开读出→删除消失，8 步眼睛盯
+- 改表/改 DAO 后跑 `dart run build_runner build`；改纯业务代码（无 Drift 注解）不需重跑
+
+
+
 
 
