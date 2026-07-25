@@ -16,10 +16,14 @@ final GoRouter appRouter = GoRouter(
   initialLocation: '/notes',
   routes: [
     // 沉浸页：编辑器（不在 shell 内，隐藏底栏）
+    // 可选 query: ?subjectId=xxx 用于"新建"时一键定级（FAB 定级窗选完带过来）
     GoRoute(
       path: '/notes/editor/:noteId',
-      builder: (context, state) =>
-          NoteEditorView(noteId: state.pathParameters['noteId']!),
+      builder: (context, state) {
+        final noteId = state.pathParameters['noteId']!;
+        final subjectId = state.uri.queryParameters['subjectId'];
+        return NoteEditorView(noteId: noteId, subjectId: subjectId);
+      },
     ),
     // 底部 5 标签导航 shell
     StatefulShellRoute.indexedStack(

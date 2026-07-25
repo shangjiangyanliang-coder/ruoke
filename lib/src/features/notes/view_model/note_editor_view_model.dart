@@ -26,19 +26,30 @@ class NoteEditorState {
   /// 是否已加载完成（build 初始为 false，init 完成后 true）
   final bool ready;
 
+  /// 新建时归属的科目节点 id（由 FAB 定级窗传入；'new' 态用）。
+  /// null 则回退 defaultSubjectId（未分类）。
+  final String? subjectId;
+
   const NoteEditorState({
     this.note,
     this.dirty = false,
     this.isNew = false,
     this.ready = false,
+    this.subjectId,
   });
 
-  NoteEditorState copyWith({Note? note, bool? dirty, bool? isNew, bool? ready}) =>
+  NoteEditorState copyWith(
+          {Note? note,
+          bool? dirty,
+          bool? isNew,
+          bool? ready,
+          String? subjectId}) =>
       NoteEditorState(
         note: note ?? this.note,
         dirty: dirty ?? this.dirty,
         isNew: isNew ?? this.isNew,
         ready: ready ?? this.ready,
+        subjectId: subjectId ?? this.subjectId,
       );
 }
 
@@ -47,13 +58,13 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
   @override
   Future<NoteEditorState> build() async => const NoteEditorState();
 
-  /// View 在 initState 调一次，传 route 的 noteId。
-  Future<void> init(String noteId) async {
+  /// View 在 initState 调一次，传 route 的 noteId。新建态可传 subjectId 定级。
+  Future<void> init(String noteId, {String? subjectId}) async {
     state = const AsyncLoading<NoteEditorState>();
     try {
       if (noteId == 'new') {
-        state = const AsyncData(
-            NoteEditorState(isNew: true, ready: true));
+        state = AsyncData(
+            NoteEditorState(isNew: true, ready: true, subjectId: subjectId));
         return;
       }
       final r = await ref.read(noteRepositoryProvider).getById(noteId);
@@ -90,7 +101,8 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
     final repo = ref.read(noteRepositoryProvider);
     if (cur.isNew) {
       final r = await repo.create(
-        subjectId: defaultSubjectId,
+        // 新建时用 init 带入的 subjectId，未传则兜底 defaultSubjectId（未分类）
+        subjectId: cur.subjectId ?? defaultSubjectId,
         title: title,
         contentJson: contentJson,
         isDraft: false,

@@ -16,7 +16,10 @@ import '../view_model/view_model_providers.dart';
 class NoteEditorView extends ConsumerStatefulWidget {
   final String noteId; // 'new' 或已有 id
 
-  const NoteEditorView({super.key, required this.noteId});
+  /// 新建时由 FAB 定级窗传入的归属科目 id（'new' 态用）。已有笔记忽略。
+  final String? subjectId;
+
+  const NoteEditorView({super.key, required this.noteId, this.subjectId});
 
   @override
   ConsumerState<NoteEditorView> createState() => _NoteEditorViewState();
@@ -29,9 +32,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   @override
   void initState() {
     super.initState();
-    // 进入即触发 VM 加载对应 noteId
+    // 进入即触发 VM 加载对应 noteId（新建态带 subjectId 定级）
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(noteEditorVmProvider.notifier).init(widget.noteId);
+      ref.read(noteEditorVmProvider.notifier).init(widget.noteId,
+          subjectId: widget.subjectId);
     });
   }
 

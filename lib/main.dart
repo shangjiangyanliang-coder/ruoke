@@ -1,7 +1,7 @@
 // 文件: lib/main.dart
 // 作用: 若可 Ruoke 程序入口。只做"装配"：加载 dotenv、
-//       套 ProviderScope(Riverpod 接管依赖)、MaterialApp.router 接 go_router、
-//       注册本地化委托(含 flutter_quill 的 FlutterQuillLocalizations)、设定主题。
+//       首启 seed 示例科目树、套 ProviderScope(Riverpod 接管依赖)、
+//       MaterialApp.router 接 go_router、注册本地化委托(含 flutter_quill)、设定主题。
 //       业务一律不写在这里，放各 features 的 view_model。
 // 详见: jihua/ruoke-技术方案总集-20260716.md 启动初始化顺序(C 文档 §6.3)
 import 'package:flutter/material.dart';
@@ -10,6 +10,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'src/data/database/app_database.dart';
+import 'src/data/database/seed/subject_seed.dart';
 import 'src/routing/app_router.dart';
 
 Future<void> main() async {
@@ -25,8 +27,17 @@ Future<void> main() async {
     debugPrint('[ruoke] 未加载 .env(忽略): $e');
   }
 
-  // 3.(V2 阶段在此打开数据库 / 首次种子数据,见 C 文档 §6.3;
-  //    第2批起数据库由各 feature 的 appDatabaseProvider 懒加载,此处不需要预先打开。)
+  // 3. 首启 seed 示例科目树（表空才插，幂等）。
+  //    用一个临时 AppDatabase 实例跑 seed 完关掉；ProviderScope 内会用 appDatabaseProvider
+  //    新建另一个实例共享同一个 .sqlite 文件，Drift 支持多实例同库。
+  //    （V2 阶段此处统一进启动初始化服务，见 C 文档 §6.3。）
+  try {
+    final seedDb = AppDatabase();
+    await SubjectSeed(seedDb.subjectDao).runIfEmpty();
+    await seedDb.close();
+  } catch (e) {
+    debugPrint('[ruoke] 科目 seed 失败(忽略,不打断启动): $e');
+  }
 
   // 4. runApp + ProviderScope(Riverpod 接管所有依赖注入)
   runApp(const ProviderScope(child: RuokeApp()));
