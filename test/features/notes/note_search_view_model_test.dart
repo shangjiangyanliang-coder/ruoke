@@ -53,6 +53,26 @@ void main() {
     expect(repository.queries.last.sortOrder, NoteSortOrder.titleAsc);
   });
 
+  test('搜索加载中仍暴露页面恢复所需的真实查询条件', () async {
+    final repository = _FakeNoteRepository()
+      ..secondSearch = Completer<Result<List<Note>>>();
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(noteSearchVmProvider.notifier);
+    await container.read(noteSearchVmProvider.future);
+
+    final searching = notifier.setKeyword('加载中条件');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(noteSearchVmProvider).isLoading, isTrue);
+    expect(notifier.currentQuery.keyword, '加载中条件');
+
+    repository.secondSearch!.complete(Success([_note('loaded', '加载完成')]));
+    await searching;
+  });
+
   test('连续三次查询时旧请求不会覆盖最新条件结果', () async {
     final repository = _FakeNoteRepository()
       ..firstSearch = Completer<Result<List<Note>>>()

@@ -26,13 +26,14 @@ class NoteListView extends ConsumerWidget {
         title: const Text('笔记'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.label_outline),
+            tooltip: '标签管理',
+            onPressed: () => context.push('/notes/tags'),
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
-            tooltip: '搜索',
-            onPressed: () {
-              // TODO: 第5批笔记搜索（plain_text LIKE）
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('搜索待第5批开发')));
-            },
+            tooltip: '搜索笔记',
+            onPressed: () => context.push('/notes/search'),
           ),
         ],
       ),
@@ -41,26 +42,27 @@ class NoteListView extends ConsumerWidget {
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('加载失败：$e',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(
+              '加载失败：$e',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
         ),
         data: (state) {
-          final totalNotes = state.uncategorized.length +
+          final totalNotes =
+              state.uncategorized.length +
               state.books.fold<int>(
-                  0,
-                  (acc, b) =>
-                      acc + _countNotesInNode(b) + (b.notes.length));
+                0,
+                (acc, b) => acc + _countNotesInNode(b) + (b.notes.length),
+              );
           if (totalNotes == 0 && state.books.isEmpty) {
             return const _EmptyHint();
           }
           return ListView(
             padding: const EdgeInsets.only(bottom: 80),
             children: [
-              ...state.books
-                  .map((book) => _BookTile(book: book, depth: 0))
-                  ,
+              ...state.books.map((book) => _BookTile(book: book, depth: 0)),
               if (state.uncategorized.isNotEmpty)
                 _UncategorizedTile(
                   notes: state.uncategorized,
@@ -76,8 +78,7 @@ class NoteListView extends ConsumerWidget {
           // FAB 弹定级窗（#9）：选书/章/节，返回 subjectId
           final subjectId = await showSubjectPickerDialog(context, ref);
           if (!context.mounted || subjectId == null) return;
-          await context.push(
-              '/notes/editor/new?subjectId=$subjectId');
+          await context.push('/notes/editor/new?subjectId=$subjectId');
           // 编辑器返回后刷新树
           ref.read(subjectTreeVmProvider.notifier).refresh();
         },
@@ -140,8 +141,9 @@ class _BookTile extends ConsumerWidget {
           // 整本书笔记（subjectId 指向书节点，F1.1.6 支持省章-节）
           ...book.notes.map((n) => _NoteRow(note: n, depth: depth + 1)),
           // 章节点
-          ...book.children
-              .map((ch) => _ChapterTile(chapter: ch, depth: depth + 1)),
+          ...book.children.map(
+            (ch) => _ChapterTile(chapter: ch, depth: depth + 1),
+          ),
         ],
       ],
     );
@@ -157,8 +159,7 @@ class _ChapterTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(subjectTreeVmProvider).value;
-    final expanded =
-        state?.expandedIds.contains(chapter.subject.id) ?? false;
+    final expanded = state?.expandedIds.contains(chapter.subject.id) ?? false;
     return Column(
       children: [
         _SubjectRow(
@@ -219,18 +220,21 @@ class _UncategorizedTile extends ConsumerWidget {
       children: [
         ListTile(
           dense: true,
-          leading: Icon(Icons.category_outlined,
-              color: Theme.of(context).hintColor),
-          title: Text('未分类 (${notes.length})',
-              style: TextStyle(color: Theme.of(context).hintColor)),
-          trailing: Icon(expanded
-              ? Icons.keyboard_arrow_down
-              : Icons.keyboard_arrow_right),
+          leading: Icon(
+            Icons.category_outlined,
+            color: Theme.of(context).hintColor,
+          ),
+          title: Text(
+            '未分类 (${notes.length})',
+            style: TextStyle(color: Theme.of(context).hintColor),
+          ),
+          trailing: Icon(
+            expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+          ),
           onTap: () =>
               ref.read(subjectTreeVmProvider.notifier).toggleUncategorized(),
         ),
-        if (expanded)
-          ...notes.map((n) => _NoteRow(note: n, depth: 1)),
+        if (expanded) ...notes.map((n) => _NoteRow(note: n, depth: 1)),
       ],
     );
   }
@@ -254,12 +258,22 @@ class _SubjectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = const {0: Icons.menu_book, 1: Icons.bookmark, 2: Icons.article}[subject.level] ??
+    final icon =
+        const {
+          0: Icons.menu_book,
+          1: Icons.bookmark,
+          2: Icons.article,
+        }[subject.level] ??
         Icons.circle;
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.only(left: 16.0 + depth * 16, top: 8, bottom: 8, right: 12),
+        padding: EdgeInsets.only(
+          left: 16.0 + depth * 16,
+          top: 8,
+          bottom: 8,
+          right: 12,
+        ),
         child: Row(
           children: [
             Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
@@ -268,14 +282,16 @@ class _SubjectRow extends StatelessWidget {
               child: Text(
                 subject.name,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: depth == 0 ? FontWeight.w600 : FontWeight.normal,
-                    ),
+                  fontWeight: depth == 0 ? FontWeight.w600 : FontWeight.normal,
+                ),
               ),
             ),
             if (hasChildren)
-              Icon(expanded
-                  ? Icons.keyboard_arrow_down
-                  : Icons.keyboard_arrow_right),
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_down
+                    : Icons.keyboard_arrow_right,
+              ),
           ],
         ),
       ),
@@ -293,19 +309,27 @@ class _NoteRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
       dense: true,
-      contentPadding:
-          EdgeInsets.only(left: 32.0 + depth * 16, right: 12),
+      contentPadding: EdgeInsets.only(left: 32.0 + depth * 16, right: 12),
       leading: const Icon(Icons.description_outlined, size: 18),
-      title: Text(note.displayTitle,
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(note.summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(
+        note.displayTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        note.summary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline, size: 20),
         tooltip: '删除',
         onPressed: () async {
           final ok = await _confirmDelete(context);
           if (!ok || !context.mounted) return;
-          await ref.read(subjectTreeVmProvider.notifier).softDeleteNote(note.id);
+          await ref
+              .read(subjectTreeVmProvider.notifier)
+              .softDeleteNote(note.id);
         },
       ),
       onTap: () async {
@@ -323,8 +347,14 @@ class _NoteRow extends ConsumerWidget {
         title: const Text('删除笔记？'),
         content: const Text('删除后进回收站，可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );

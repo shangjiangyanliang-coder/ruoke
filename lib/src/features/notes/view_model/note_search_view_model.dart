@@ -23,6 +23,9 @@ class NoteSearchVm extends AsyncNotifier<NoteSearchState> {
   int _requestRevision = 0;
   Future<NoteSearchState>? _latestRequest;
 
+  /// 当前实际查询条件；页面在 AsyncLoading 时也能恢复筛选控件。
+  NoteSearchQuery get currentQuery => _currentQuery;
+
   @override
   Future<NoteSearchState> build() {
     final revision = ++_requestRevision;

@@ -9,8 +9,10 @@ import 'package:go_router/go_router.dart';
 
 import '../features/notes/view/note_editor_view.dart';
 import '../features/notes/view/note_list_view.dart';
+import '../features/notes/view/note_search_view.dart';
 import '../features/notes/view/note_version_list_view.dart';
 import '../features/notes/view/subject_manage_view.dart';
+import '../features/notes/view/tag_management_view.dart';
 import 'placeholder_page.dart';
 import 'settings_view.dart';
 
@@ -32,6 +34,20 @@ final GoRouter appRouter = GoRouter(
       path: '/notes/editor/:noteId/versions',
       builder: (context, state) =>
           NoteVersionListView(noteId: state.pathParameters['noteId']!),
+    ),
+    GoRoute(
+      path: '/notes/tags',
+      builder: (context, state) => const TagManagementView(),
+    ),
+    GoRoute(
+      path: '/notes/search',
+      builder: (context, state) {
+        final rawTagIds = state.uri.queryParameters['tagIds'];
+        final tagIds = rawTagIds == null || rawTagIds.isEmpty
+            ? const <String>{}
+            : rawTagIds.split(',').where((id) => id.isNotEmpty).toSet();
+        return NoteSearchView(initialTagIds: tagIds);
+      },
     ),
     // 底部 5 标签导航 shell
     StatefulShellRoute.indexedStack(
