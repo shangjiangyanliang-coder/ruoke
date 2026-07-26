@@ -1,4 +1,6 @@
 // 标签 Repository 的 Drift 本地实现，负责领域转换、校验和事务。
+import 'package:drift/native.dart' show SqliteException;
+
 import '../../../data/database/app_database.dart';
 import '../../../data/database/daos/note_tag_dao.dart';
 import '../../../data/database/daos/tag_dao.dart';
@@ -56,8 +58,10 @@ class LocalTagRepository implements TagRepository {
         await _tagDao.insertTag(entity);
         return Tag.fromEntity(entity);
       },
-      orElse: (error) => const Failure(
-        DatabaseException('标签名称已存在，请换一个名称', techDetail: 'createTag'),
+      orElse: (error) => _tagWriteFailure(
+        error,
+        fallbackMessage: '新建标签失败',
+        operation: 'createTag',
       ),
     );
   }
@@ -73,8 +77,10 @@ class LocalTagRepository implements TagRepository {
     }
     return guard(
       () async => _tagDao.renameTag(id, normalizedName),
-      orElse: (error) => const Failure(
-        DatabaseException('标签名称已存在，请换一个名称', techDetail: 'renameTag'),
+      orElse: (error) => _tagWriteFailure(
+        error,
+        fallbackMessage: '重命名标签失败',
+        operation: 'renameTag',
       ),
     );
   }
@@ -124,5 +130,23 @@ class LocalTagRepository implements TagRepository {
   String? _normalizedName(String name) {
     final normalized = name.trim();
     return normalized.isEmpty ? null : normalized;
+  }
+
+  Failure<T> _tagWriteFailure<T>(
+    Object error, {
+    required String fallbackMessage,
+    required String operation,
+  }) {
+    if (error is SqliteException && error.extendedResultCode == 2067) {
+      return Failure(
+        DatabaseException('标签名称已存在，请换一个名称', techDetail: '$operation/unique'),
+      );
+    }
+    return Failure(
+      DatabaseException(
+        fallbackMessage,
+        techDetail: '$operation/${error.runtimeType}',
+      ),
+    );
   }
 }

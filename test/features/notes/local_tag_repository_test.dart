@@ -48,6 +48,31 @@ void main() {
     expect(_failureValue(renameConflict).userMessage, contains('标签'));
   });
 
+  test('非唯一创建异常返回新建标签失败', () async {
+    await db.customStatement(
+      "CREATE TRIGGER fail_tag_insert BEFORE INSERT ON tags "
+      "BEGIN SELECT RAISE(ABORT, 'insert failed'); END;",
+    );
+
+    final result = await repository.createTag(name: '创建失败');
+
+    expect(_failureValue(result), isA<DatabaseException>());
+    expect(_failureValue(result).userMessage, '新建标签失败');
+  });
+
+  test('非唯一改名异常返回重命名标签失败', () async {
+    final tag = _successValue(await repository.createTag(name: '旧名'));
+    await db.customStatement(
+      "CREATE TRIGGER fail_tag_rename BEFORE UPDATE ON tags "
+      "BEGIN SELECT RAISE(ABORT, 'rename failed'); END;",
+    );
+
+    final result = await repository.renameTag(id: tag.id, name: '新名');
+
+    expect(_failureValue(result), isA<DatabaseException>());
+    expect(_failureValue(result).userMessage, '重命名标签失败');
+  });
+
   test('改名会修剪名称并持久化', () async {
     final tag = _successValue(await repository.createTag(name: '旧名'));
 
