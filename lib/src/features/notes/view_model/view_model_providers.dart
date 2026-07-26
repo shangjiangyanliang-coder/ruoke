@@ -41,11 +41,15 @@ final subjectManageVmProvider =
 final tagManagementVmProvider =
     AsyncNotifierProvider<TagManagementVm, TagManagementState>(
       TagManagementVm.new,
+      retry: (_, _) => null,
     );
 
 /// 单条笔记标签 Provider；按 noteId 隔离并随使用方销毁。
 final noteTagsVmProvider = AsyncNotifierProvider.autoDispose
-    .family<NoteTagsVm, NoteTagsState, String>(NoteTagsVm.new);
+    .family<NoteTagsVm, NoteTagsState, String>(
+      NoteTagsVm.new,
+      retry: (_, _) => null,
+    );
 
 /// 笔记搜索条件与结果 ViewModel Provider。
 final noteSearchVmProvider =
