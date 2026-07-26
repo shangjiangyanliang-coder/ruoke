@@ -38,25 +38,25 @@ class NoteEditorState {
     this.subjectId,
   });
 
-  NoteEditorState copyWith(
-          {Note? note,
-          bool? dirty,
-          bool? isNew,
-          bool? ready,
-          String? subjectId}) =>
-      NoteEditorState(
-        note: note ?? this.note,
-        dirty: dirty ?? this.dirty,
-        isNew: isNew ?? this.isNew,
-        ready: ready ?? this.ready,
-        subjectId: subjectId ?? this.subjectId,
-      );
+  NoteEditorState copyWith({
+    Note? note,
+    bool? dirty,
+    bool? isNew,
+    bool? ready,
+    String? subjectId,
+  }) => NoteEditorState(
+    note: note ?? this.note,
+    dirty: dirty ?? this.dirty,
+    isNew: isNew ?? this.isNew,
+    ready: ready ?? this.ready,
+    subjectId: subjectId ?? this.subjectId,
+  );
 }
 
 /// 笔记编辑器 ViewModel。
 class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
   @override
-  Future<NoteEditorState> build() async => const NoteEditorState();
+  NoteEditorState build() => const NoteEditorState();
 
   /// View 在 initState 调一次，传 route 的 noteId。新建态可传 subjectId 定级。
   Future<void> init(String noteId, {String? subjectId}) async {
@@ -64,7 +64,8 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
     try {
       if (noteId == 'new') {
         state = AsyncData(
-            NoteEditorState(isNew: true, ready: true, subjectId: subjectId));
+          NoteEditorState(isNew: true, ready: true, subjectId: subjectId),
+        );
         return;
       }
       final r = await ref.read(noteRepositoryProvider).getById(noteId);
@@ -107,15 +108,8 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
         contentJson: contentJson,
         isDraft: false,
       );
-      if (r is! Success) return false;
-      final id = (r as Success<String>).value;
-      final loaded = await repo.getById(id);
-      final Note? note;
-      if (loaded is Success<Note?>) {
-        note = loaded.value;
-      } else {
-        note = null;
-      }
+      if (r is! Success<Note>) return false;
+      final note = r.value;
       // 新建后变成"已存"态：保留 isNew=false 以便后续 update 走对分支
       state = AsyncData(NoteEditorState(note: note, ready: true, dirty: false));
       return true;

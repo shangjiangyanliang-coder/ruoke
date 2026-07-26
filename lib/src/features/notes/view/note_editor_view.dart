@@ -34,8 +34,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     super.initState();
     // 进入即触发 VM 加载对应 noteId（新建态带 subjectId 定级）
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(noteEditorVmProvider.notifier).init(widget.noteId,
-          subjectId: widget.subjectId);
+      ref
+          .read(noteEditorVmProvider.notifier)
+          .init(widget.noteId, subjectId: widget.subjectId);
     });
   }
 
@@ -78,10 +79,44 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   Future<bool> _save() async {
     final title = _titleCtrl?.text.trim();
-    return ref.read(noteEditorVmProvider.notifier).save(
+    return ref
+        .read(noteEditorVmProvider.notifier)
+        .save(
           title: (title == null || title.isEmpty) ? null : title,
           contentJson: _currentDeltaJson(),
         );
+  }
+
+  /// 打开历史版本前先保存当前未保存内容，确保版本快照基于编辑器最新正文。
+  /// 新建笔记首次保存后使用 ViewModel 返回的真实 id，而不是继续使用路由中的 'new'。
+  Future<void> _openHistory(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var editorState = ref.read(noteEditorVmProvider).value;
+    if (editorState?.dirty == true) {
+      final saved = await _save();
+      if (!saved) {
+        if (context.mounted) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('保存失败，无法打开历史版本')),
+          );
+        }
+        return;
+      }
+      editorState = ref.read(noteEditorVmProvider).value;
+    }
+
+    final noteId = editorState?.note?.id;
+    if (noteId == null || !context.mounted) return;
+
+    final restored = await context.push<bool>('/notes/editor/$noteId/versions');
+    if (restored == true && context.mounted) {
+      _resetControllers();
+      await ref.read(noteEditorVmProvider.notifier).init(noteId);
+      if (mounted) {
+        setState(() {});
+        messenger.showSnackBar(const SnackBar(content: Text('已恢复历史版本')));
+      }
+    }
   }
 
   /// 返回：若有未保存改动弹确认
@@ -94,9 +129,18 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           title: const Text('未保存的改动'),
           content: const Text('是否先保存再离开？'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, _DiscardChoice.discard), child: const Text('不保存离开')),
-            TextButton(onPressed: () => Navigator.pop(ctx, _DiscardChoice.cancel), child: const Text('继续编辑')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, _DiscardChoice.save), child: const Text('保存并离开')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _DiscardChoice.discard),
+              child: const Text('不保存离开'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _DiscardChoice.cancel),
+              child: const Text('继续编辑'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, _DiscardChoice.save),
+              child: const Text('保存并离开'),
+            ),
           ],
         ),
       );
@@ -125,7 +169,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       },
       child: Scaffold(
         appBar: AppBar(
-          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => _back(context)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _back(context),
+          ),
           title: const Text('编辑笔记'),
           actions: [
             IconButton(
@@ -134,22 +181,26 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               onPressed: () async {
                 final ok = await _save();
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(ok ? '已保存' : '保存失败')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(ok ? '已保存' : '保存失败')));
                 }
               },
             ),
             PopupMenuButton<String>(
               tooltip: '更多',
               onSelected: (v) async {
-                if (v == 'delete') {
+                if (v == 'history') {
+                  await _openHistory(context);
+                } else if (v == 'delete') {
                   final ok = await _confirmDelete();
                   if (ok && context.mounted) context.pop();
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('删除笔记')),
+              itemBuilder: (_) => [
+                if (state.value?.note != null)
+                  const PopupMenuItem(value: 'history', child: Text('历史版本')),
+                const PopupMenuItem(value: 'delete', child: Text('删除笔记')),
               ],
             ),
           ],
@@ -181,7 +232,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       hintText: '标题（可留空）',
                       border: InputBorder.none,
                     ),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const Divider(height: 1),
@@ -230,8 +284,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         title: const Text('删除笔记？'),
         content: const Text('删除后进回收站，可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -239,6 +299,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       await ref.read(noteEditorVmProvider.notifier).delete();
     }
     return ok ?? false;
+  }
+
+  void _resetControllers() {
+    _controller?.removeListener(_onContentChanged);
+    _controller?.dispose();
+    _titleCtrl?.dispose();
+    _controller = null;
+    _titleCtrl = null;
   }
 }
 

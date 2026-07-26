@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 
 import '../../../data/database/app_database.dart';
 import '../../../data/database/daos/note_dao.dart';
+import '../../../data/database/daos/note_highlight_dao.dart';
 import '../../../data/database/daos/note_version_dao.dart';
 import '../../../data/errors/app_exception.dart';
 import '../../../data/errors/result.dart';
@@ -15,6 +16,7 @@ import '../../../utils/id_generator.dart';
 import '../../../utils/time_utils.dart';
 import '../models/note.dart';
 import '../models/note_version.dart';
+import '../utils/highlight_extractor.dart';
 import 'note_repository.dart';
 
 /// NoteRepository 的本地（Drift）实现。
@@ -24,59 +26,63 @@ class LocalNoteRepository implements NoteRepository {
   LocalNoteRepository(this._db);
 
   NoteDao get _noteDao => _db.noteDao;
+  NoteHighlightDao get _highlightDao => _db.noteHighlightDao;
   NoteVersionDao get _versionDao => _db.noteVersionDao;
 
   @override
   Future<Result<List<Note>>> listAll() => guard(
-        () async => (await _noteDao.listAll()).map(Note.fromEntity).toList(),
-        orElse: (e) => const Failure(
-          DatabaseException('读取笔记列表失败', techDetail: 'listAll'),
-        ),
-      );
+    () async => (await _noteDao.listAll()).map(Note.fromEntity).toList(),
+    orElse: (e) =>
+        const Failure(DatabaseException('读取笔记列表失败', techDetail: 'listAll')),
+  );
 
   @override
   Future<Result<Note?>> getById(String id) => guard(
-        () async {
-          final e = await _noteDao.getById(id);
-          return e == null ? null : Note.fromEntity(e);
-        },
-        orElse: (e) => const Failure(
-          DatabaseException('读取笔记失败', techDetail: 'getById'),
-        ),
-      );
+    () async {
+      final e = await _noteDao.getById(id);
+      return e == null ? null : Note.fromEntity(e);
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('读取笔记失败', techDetail: 'getById')),
+  );
 
   @override
-  Future<Result<String>> create({
+  Future<Result<Note>> create({
     required String subjectId,
     String? title,
     String? contentJson,
     String? plainText,
     bool isDraft = false,
-  }) =>
-      guard(
-        () async {
-          final now = nowMs();
-          final id = newId();
-          // plain_text 由 contentJson 派生（UI 不用关心）；外部显式传 plainText 时优先用
-          final derivedPlain = plainText ?? deltaJsonToPlainText(contentJson);
-          await _noteDao.insertNote(
-            NotesCompanion(
-              id: Value(id),
-              subjectId: Value(subjectId),
-              title: Value(title),
-              contentJson: Value(contentJson),
-              plainText: Value(derivedPlain),
-              isDraft: Value(isDraft),
-              createdAt: Value(now),
-              updatedAt: Value(now),
-            ),
-          );
-          return id;
-        },
-        orElse: (e) => const Failure(
-          DatabaseException('新建笔记失败', techDetail: 'create'),
-        ),
-      );
+  }) => guard(
+    () async {
+      final now = nowMs();
+      final id = newId();
+      // plain_text 由 contentJson 派生（UI 不用关心）；外部显式传 plainText 时优先用
+      final derivedPlain = plainText ?? deltaJsonToPlainText(contentJson);
+      return _db.transaction(() async {
+        await _noteDao.insertNote(
+          NotesCompanion(
+            id: Value(id),
+            subjectId: Value(subjectId),
+            title: Value(title),
+            contentJson: Value(contentJson),
+            plainText: Value(derivedPlain),
+            isDraft: Value(isDraft),
+            createdAt: Value(now),
+            updatedAt: Value(now),
+          ),
+        );
+        await _replaceHighlights(id, contentJson, now);
+        final created = await _noteDao.getById(id);
+        if (created == null) {
+          throw StateError('新建笔记后回读失败: $id');
+        }
+        return Note.fromEntity(created);
+      });
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('新建笔记失败', techDetail: 'create')),
+  );
 
   @override
   Future<Result<void>> update({
@@ -85,52 +91,133 @@ class LocalNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
-  }) =>
-      guard(
-        () async {
-          final now = nowMs();
-          // 取旧笔记：若正文相对上一版有变化则写一条 version 快照
-          final old = await _noteDao.getById(id);
-          if (old != null && contentJson != null && contentJson != old.contentJson) {
-            final maxVersion = await _versionDao.maxVersionNo(id);
-            await _versionDao.insertVersion(
-              NoteVersionsCompanion(
-                id: Value(newId()),
-                noteId: Value(id),
-                versionNo: Value(maxVersion + 1),
-                snapshotJson: Value(old.contentJson ?? ''),
-                createdAt: Value(now),
-              ),
-            );
-          }
-          await _noteDao.updateNote(
-            id,
-            title: title,
-            contentJson: contentJson,
-            plainText: plainText ?? deltaJsonToPlainText(contentJson),
-            isDraft: isDraft,
-            updatedAt: now,
+  }) => guard(
+    () async {
+      final now = nowMs();
+      await _db.transaction(() async {
+        // 取旧笔记：若正文相对上一版有变化则写一条 version 快照。
+        final old = await _noteDao.getById(id);
+        if (old == null) {
+          throw StateError('笔记不存在: $id');
+        }
+        if (contentJson != null && contentJson != old.contentJson) {
+          await _saveVersion(
+            noteId: id,
+            snapshotJson: old.contentJson ?? '',
+            createdAt: now,
           );
-        },
-        orElse: (e) => const Failure(
-          DatabaseException('保存笔记失败', techDetail: 'update'),
-        ),
-      );
+        }
+        final updatedRows = await _noteDao.updateNote(
+          id,
+          title: title,
+          contentJson: contentJson,
+          plainText: plainText ?? deltaJsonToPlainText(contentJson),
+          isDraft: isDraft,
+          updatedAt: now,
+        );
+        if (updatedRows != 1) {
+          throw StateError('更新笔记行数异常: $id/$updatedRows');
+        }
+        if (contentJson != null) {
+          await _replaceHighlights(id, contentJson, now);
+        }
+      });
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('保存笔记失败', techDetail: 'update')),
+  );
 
   @override
   Future<Result<void>> softDelete(String id) => guard(
-        () async => _noteDao.softDelete(id, nowMs()),
-        orElse: (e) => const Failure(
-          DatabaseException('删除笔记失败', techDetail: 'softDelete'),
-        ),
-      );
+    () async => _noteDao.softDelete(id, nowMs()),
+    orElse: (e) =>
+        const Failure(DatabaseException('删除笔记失败', techDetail: 'softDelete')),
+  );
+
+  @override
+  Future<Result<void>> restoreVersion({
+    required String noteId,
+    required int versionNo,
+  }) => guard(
+    () async {
+      final now = nowMs();
+      await _db.transaction(() async {
+        final current = await _noteDao.getById(noteId);
+        if (current == null) {
+          throw StateError('笔记不存在: $noteId');
+        }
+        final target = await _versionDao.getByVersion(noteId, versionNo);
+        if (target == null) {
+          throw StateError('历史版本不存在: $noteId/$versionNo');
+        }
+        if (current.contentJson != target.snapshotJson) {
+          await _saveVersion(
+            noteId: noteId,
+            snapshotJson: current.contentJson ?? '',
+            createdAt: now,
+          );
+        }
+        final updatedRows = await _noteDao.updateNote(
+          noteId,
+          contentJson: target.snapshotJson,
+          plainText: deltaJsonToPlainText(target.snapshotJson),
+          updatedAt: now,
+        );
+        if (updatedRows != 1) {
+          throw StateError('恢复笔记行数异常: $noteId/$updatedRows');
+        }
+        await _replaceHighlights(noteId, target.snapshotJson, now);
+      });
+    },
+    orElse: (e) => const Failure(
+      DatabaseException('恢复历史版本失败', techDetail: 'restoreVersion'),
+    ),
+  );
 
   @override
   Future<Result<List<NoteVersion>>> listVersions(String noteId) => guard(
-        () async =>
-            (await _versionDao.listByNote(noteId)).map(NoteVersion.fromEntity).toList(),
-        orElse: (e) => const Failure(
-          DatabaseException('读取历史版本失败', techDetail: 'listVersions'),
+    () async => (await _versionDao.listByNote(
+      noteId,
+    )).map(NoteVersion.fromEntity).toList(),
+    orElse: (e) => const Failure(
+      DatabaseException('读取历史版本失败', techDetail: 'listVersions'),
+    ),
+  );
+
+  Future<void> _saveVersion({
+    required String noteId,
+    required String snapshotJson,
+    required int createdAt,
+  }) async {
+    final maxVersion = await _versionDao.maxVersionNo(noteId);
+    await _versionDao.insertVersion(
+      NoteVersionsCompanion(
+        id: Value(newId()),
+        noteId: Value(noteId),
+        versionNo: Value(maxVersion + 1),
+        snapshotJson: Value(snapshotJson),
+        createdAt: Value(createdAt),
+      ),
+    );
+  }
+
+  Future<void> _replaceHighlights(
+    String noteId,
+    String? contentJson,
+    int createdAt,
+  ) async {
+    final drafts = HighlightExtractor.extract(contentJson);
+    await _highlightDao.deleteByNote(noteId);
+    for (final draft in drafts) {
+      await _highlightDao.insertHighlight(
+        NoteHighlightsCompanion(
+          id: Value(newId()),
+          noteId: Value(noteId),
+          kind: Value(draft.kind),
+          body: Value(draft.body),
+          createdAt: Value(createdAt),
         ),
       );
+    }
+  }
 }

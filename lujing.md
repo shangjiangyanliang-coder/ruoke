@@ -1032,4 +1032,281 @@ git commits：`9b00c60 feat: 笔记分级-书章节树+一键定级`（16 文件
 
 
 
+---
 
+## 技术路径记录：2026-07-26 10:00（阶段5 第4批：重点标记入库 + 历史版本回退）
+
+### 1. 完成事项
+
+完成阶段5第4批方案 A（最小 MVP 闭环）：
+
+- 笔记手动保存时解析 Quill Delta，将红字和下划线内容全量重建到 `note_highlight` 表；
+- 正文发生变化时，将修改前正文保存为 `note_version` 快照；
+- 新增历史版本列表页，按版本号倒序显示；
+- 支持恢复指定版本，恢复前先把当前正文保存为新快照；
+- 编辑器首次保存新笔记后，无需退出重进即可打开历史版本；
+- 从有未保存正文的编辑器进入历史版本前会先保存，保存失败则阻止跳转；
+- 解决真机回归发现的编辑器持续转圈、Quill 实际红色值无法识别、恢复后刷新失败误报恢复失败等问题。
+
+本批未修改 F1.1.10-F1.1.15 已知待办，未实现版本对比、标题历史、自动保存、另存为新笔记和重点字符位置定位。代码尚未 commit，未 push。
+
+### 2. 初始条件与输入
+
+- 当前分支：`feature/notes-mvp`，第1/2/3批已提交并推送至 `origin/feature/notes-mvp`；
+- 第1批已创建 `note_highlight`、`note_version` 表及 DAO 骨架，不需要改 schemaVersion 或数据库迁移；
+- 第2批已有 Quill Delta JSON 持久化和“正文变化时保存旧正文快照”的基础逻辑；
+- 编辑器工具栏已有红字和下划线按钮，本批不重新设计工具栏；
+- 需求依据：
+  - F1.1.7：红字/下划线内容作为重点记录；
+  - F1.1.4：查看历史版本并回退；
+  - B1.b 历史版本线框；
+  - `jihua/ruoke-阶段5第4批重点标记历史版本回退开发计划-20260725.md`；
+- 用户选择方案 A：重点表保存 `kind + body`，`start/end` 暂为 null；历史快照只覆盖正文；
+- 已知 bug F1.1.10-F1.1.15 明确留待办，本批不处理；
+- 环境：Flutter 3.44.4、Dart 3.12.2、Riverpod 3.3.2、Drift 2.34.2、flutter_quill 11.5.1、go_router 17.3；
+- 真机：PJF110，Android 16，ADB 设备码 `9d306d62`。
+
+### 3. 技术方案选择
+
+#### 可选方案
+
+- 方案 A：保存时扫描 Quill Delta，提取红字/下划线文本，按笔记先删后插全量重建重点；历史页只做列表和恢复。
+  - 优点：不改表结构，逻辑确定，避免复杂的富文本字符位置换算，能快速闭环 F1.1.7/F1.1.4；
+  - 缺点：`start/end` 暂为空，不能从重点记录精确跳回原文位置。
+- 方案 B：在编辑过程中监听 Delta change，实时维护重点表和字符范围。
+  - 优点：可保留精确位置，未来可做重点导航；
+  - 缺点：Delta 的插入、删除、格式覆盖会持续改变偏移量，需要处理组合操作、换行和 Unicode 边界，超出 MVP 范围。
+- 历史恢复另存为新笔记：保留原笔记不动，恢复内容生成新笔记。
+  - 优点：原笔记完全不被覆盖；
+  - 缺点：会产生额外笔记和科目关联处理，不符合当前“回退当前笔记”的交互。
+
+#### 最终选择
+
+采用方案 A：
+
+1. `create/update/restoreVersion` 都通过 Repository 统一重建重点；
+2. `update` 仅在正文 JSON 变化时生成旧正文快照；
+3. `restoreVersion` 在同一事务内保存当前正文快照、写回目标正文并重建重点；
+4. 历史列表由独立 ViewModel 管理加载与恢复；
+5. 编辑器打开历史页前若存在未保存内容，先执行保存。
+
+#### 选择原因
+
+- 已有数据库表和 Quill 工具栏可直接复用，修改范围小；
+- 将事务边界放在 Repository，可保证“版本快照、当前正文、重点记录”同步成功或同步失败；
+- View 不直接访问 DAO，保持现有 View → ViewModel → Repository → DAO 分层；
+- 恢复前保存当前正文，既满足回退，又保留可再次前进的版本；
+- 不改数据库结构，降低对前三批已验证功能的回归风险。
+
+### 4. 详细实施路径
+
+#### 步骤 1：建立第4批计划与范围边界
+
+- **目的：** 把用户选择的方案 A 转成可执行、可验收的任务；
+- **操作：** 新建 `jihua/ruoke-阶段5第4批重点标记历史版本回退开发计划-20260725.md`；
+- **方法或技术：** 按 TDD 拆为重点解析器、Repository 事务、版本页与路由、验证四组；
+- **关键设置：** 不改数据库 schema；不修 F1.1.10-F1.1.15；不 push；
+- **输出：** 第4批开发计划；
+- **判断依据：** 文件范围、接口约定、测试顺序和验收标准均明确。
+
+#### 步骤 2：用测试驱动重点解析器
+
+- **目的：** 将 Quill Delta 中的重点格式转换为可写入数据库的领域数据；
+- **操作：** 先写 `highlight_extractor_test.dart` 失败测试，再实现 `highlight_extractor.dart` 和 `NoteHighlight`；
+- **方法或技术：** 遍历 Delta operation；仅处理 `insert` 为非空字符串的操作；读取 `attributes.color` 和 `attributes.underline`；
+- **输入：** Quill Delta JSON；
+- **关键设置：**
+  - 红色兼容 `red`、`#F44336`、`#FFF44336`，比较时统一大写；
+  - 下划线仅在 `underline == true` 时提取；
+  - 同一段同时红色和下划线时生成两条重点；
+  - 普通文字和空字符串不生成重点；
+  - `start/end` 保持 null；
+- **输出：** `List<NoteHighlight>`；
+- **判断依据：** 解析器单元测试覆盖普通文本、红字、下划线、双格式、空操作及真机 Quill 红色值。
+
+#### 步骤 3：扩展 DAO 和 Repository 事务
+
+- **目的：** 保存笔记时同步维护重点和历史快照；
+- **操作：**
+  - `note_highlight_dao.dart` 改为接收 `NoteHighlightsCompanion`；
+  - `NoteRepository` 增加 `restoreVersion`；
+  - `LocalNoteRepository` 增加重点重建、下一版本号、版本恢复等辅助逻辑；
+- **方法或技术：** 使用 Drift `transaction` 包裹多表写入；
+- **关键设置：**
+  - create：写当前笔记后提取并写入重点；
+  - update：正文变化时先保存旧正文快照，再更新笔记，最后删旧重点并写新重点；
+  - 正文未变化时不生成空版本；
+  - restore：校验目标版本存在；先保存当前正文为新版本，再写回目标正文并重建重点；
+  - 重点采用按 noteId 全量删除后批量插入，防止重复累积和过期重点残留；
+- **输出：** 保存、更新和恢复流程形成一致的数据事务；
+- **判断依据：** 本地 Repository 数据库测试验证新建重点、更新重建、版本生成和恢复行为。
+
+#### 步骤 4：实现历史版本 ViewModel、列表页与路由
+
+- **目的：** 提供用户可操作的版本列表和恢复入口；
+- **操作：**
+  - 新建 `NoteVersionVm` 和 Provider family；
+  - 新建 `NoteVersionListView`；
+  - 增加 `/notes/editor/:noteId/versions` 路由；
+  - 编辑器“更多”菜单增加“历史版本”；
+- **方法或技术：** Riverpod 手写 `AsyncNotifier`；go_router 子路由；恢复前显示确认对话框；
+- **关键设置：**
+  - 版本按 Repository 返回顺序倒序展示；
+  - 恢复成功后重新加载列表；
+  - 恢复已成功但列表刷新失败时，仍返回恢复成功，刷新错误只保留在列表状态中；
+  - 恢复成功后返回编辑器，由编辑器重新加载当前笔记；
+- **输出：** B1.b 历史版本 MVP 页面；
+- **判断依据：** ViewModel 测试覆盖加载、恢复、恢复失败，以及恢复成功后刷新失败的边界。
+
+#### 步骤 5：修复编辑器进入历史页的状态边界
+
+- **目的：** 避免新笔记首次保存后无历史入口，以及未保存正文丢失；
+- **操作：**
+  - 历史入口可用性由 `state.value?.note != null` 判断，不再只看静态路由参数是否为 `new`；
+  - 跳转时使用 ViewModel 中实际保存后的 noteId；
+  - 编辑器为 dirty 时，进入历史页前先保存；
+  - 保存失败时提示“保存失败，无法打开历史版本”并停止跳转；
+- **方法或技术：** widget 回归测试验证菜单入口、dirty 保存和失败阻断；
+- **关键设置：** 标题变化会保存当前笔记，但版本快照仍只由正文变化触发，这是本批定义的边界；
+- **输出：** 新建笔记首次保存即可访问历史，正文修改后可直接进入历史；
+- **判断依据：** `note_editor_history_entry_test.dart` 通过，并在 PJF110 真机复现通过。
+
+#### 步骤 6：定位并修复真机回归
+
+- **目的：** 处理自动化测试未覆盖、真机操作暴露的异常；
+- **操作与根因：**
+  1. 编辑器持续转圈：`NoteEditorVm.build()` 原为异步，`init()` 写入 ready 状态后，迟到的 build 完成又覆盖状态；改为同步 `build() => const NoteEditorState()`；
+  2. 实际红字未识别：flutter_quill Material 红色写入的是 `#FFF44336`，不是只有字符串 `red`；扩展颜色兼容；
+  3. 新笔记首次保存后无历史入口：UI 仍依据路由参数 `new`；改为依据已保存的实际 note；
+  4. dirty 正文直接进历史未形成快照：进入路由前没有保存；增加先保存流程；
+  5. 恢复成功但刷新失败返回 false：把恢复结果与列表刷新结果解耦；
+  6. widget 测试菜单点击失败：测试在点击“更多”后未 pump 新 frame，并非生产代码错误；修正测试同步方式；
+- **方法或技术：** systematic debugging 逐项确认现象、最小复现和根因；每个生产修复先补失败测试；
+- **输出：** 真机核心闭环可连续执行；
+- **判断依据：** 定向测试、全量测试、analyze、APK build 和真机回归均通过。
+
+### 5. 核心技术细节
+
+- **重点提取不是富文本渲染：** `note_highlight` 是从 Delta 派生的索引数据，真实正文仍以 `contentJson` 为准。重点表可以全量重建，不作为正文唯一来源。
+- **Quill 红色编码兼容：** 工具栏选择 Material red 后，Delta 可能写 `#FFF44336`（ARGB）或 `#F44336`（RGB），也可能存在命名色 `red`。解析时统一大写再匹配，避免大小写和格式差异。
+- **事务一致性：** 更新正文时“旧正文快照 → 当前正文更新 → 重点重建”必须处于同一事务。任何一步失败都不能留下半更新状态。
+- **版本号策略：** 读取当前最大版本号后加 1。恢复操作本身也产生新版本，因此恢复后版本列表会多一条“恢复前内容”。
+- **快照范围：** `note_version.snapshotJson` 只保存正文 Delta JSON。标题、科目和标签不参与本批回退；标题-only 保存不会创建版本。
+- **恢复结果与刷新解耦：** Repository 恢复成功是数据事实。列表重新加载失败是展示层后续错误，不能把已经完成的恢复向用户误报为失败。
+- **Riverpod 初始化竞态：** 对需要外部 `init(noteId)` 驱动的编辑器 VM，`build()` 使用同步初始状态，避免异步 build 在 init 后完成并覆盖状态。
+- **新笔记身份切换：** 路由参数 `new` 只描述进入页面时的身份；首次保存后应以 VM 当前 `note.id` 为真实身份，后续历史路由必须使用该 ID。
+- **dirty 进入历史：** 进入历史页是离开当前编辑上下文，必须先保存；失败时留在原页，避免用户误以为当前内容已进入版本链。
+
+### 6. 文件与资源变更
+
+| 文件或资源 | 操作 | 具体内容 | 作用 |
+|---|---|---|---|
+| `jihua/ruoke-阶段5第4批重点标记历史版本回退开发计划-20260725.md` | 新建 | 方案 A、范围、TDD 步骤与验收标准 | 第4批执行依据 |
+| `lib/src/data/database/daos/note_highlight_dao.dart` | 修改 | 重点插入改收 Companion | 支持 Repository 写入派生重点 |
+| `lib/src/features/notes/models/note_highlight.dart` | 新建 | 重点领域模型 | 隔离数据库实体与解析逻辑 |
+| `lib/src/features/notes/utils/highlight_extractor.dart` | 新建 | 解析 Delta 红字/下划线 | 生成重点数据 |
+| `lib/src/features/notes/repository/note_repository.dart` | 修改 | 增加版本恢复接口 | 统一版本能力契约 |
+| `lib/src/features/notes/repository/local_note_repository.dart` | 修改 | 事务保存、重点重建、版本快照与恢复 | 第4批数据核心 |
+| `lib/src/features/notes/view_model/note_version_view_model.dart` | 新建 | 加载版本、恢复并刷新 | 历史页状态管理 |
+| `lib/src/features/notes/view_model/note_editor_view_model.dart` | 修改 | 同步 build 初始状态 | 修复 init 状态被覆盖 |
+| `lib/src/features/notes/view_model/view_model_providers.dart` | 修改 | 注册版本 ViewModel family | Riverpod 注入 |
+| `lib/src/features/notes/view/note_version_list_view.dart` | 新建 | 版本列表、确认恢复、结果提示 | 历史版本 UI |
+| `lib/src/features/notes/view/note_editor_view.dart` | 修改 | 历史入口、实际 noteId、dirty 先保存、返回刷新 | 编辑器接入历史能力 |
+| `lib/src/routing/app_router.dart` | 修改 | 新增版本列表沉浸路由 | 页面导航 |
+| `test/features/notes/highlight_extractor_test.dart` | 新建 | 重点解析与真实红色值测试 | 解析回归保护 |
+| `test/features/notes/local_note_repository_test.dart` | 新建 | 重点、版本、恢复数据库测试 | 数据事务验证 |
+| `test/features/notes/note_version_view_model_test.dart` | 新建 | 列表、恢复、刷新失败测试 | ViewModel 边界验证 |
+| `test/features/notes/note_editor_history_entry_test.dart` | 新建 | 首存入口、dirty 保存、失败阻断测试 | 编辑器历史入口回归保护 |
+| `test/features/notes/note_editor_view_model_test.dart` | 新建 | init 跨事件循环保持 ready | Riverpod 初始化竞态保护 |
+| `test/widget_test.dart` | 修改 | 路由和编辑器 widget 测试适配 | 全局回归测试 |
+
+本批源码与测试仍在工作区，尚未 commit，尚未 push。
+
+### 7. 问题、尝试与解决过程
+
+#### 问题 1：编辑器真机持续显示加载
+
+- **表现：** 进入编辑器后一直转圈，退出再进也可能受状态时序影响；
+- **原因判断：** `build()` 异步返回初始状态，外部 `init()` 已经设置 ready 后，迟到的 build 结果再次覆盖 state；
+- **尝试过的方法：** 通过 VM 单元测试让 `init()` 完成后再跨一个事件循环检查状态；
+- **最终处理：** `build()` 改为同步返回 `const NoteEditorState()`；
+- **处理结果：** 单元测试通过，PJF110 编辑器可正常加载。
+
+#### 问题 2：真机红字未写入重点解析结果
+
+- **表现：** 测试中的 `color: red` 可提取，但真机工具栏选择红色后数据未匹配；
+- **原因判断：** flutter_quill 实际保存 Material red 为 `#FFF44336`；
+- **最终处理：** 兼容 `red`、`#F44336`、`#FFF44336`，统一大小写比较；
+- **处理结果：** 增加真实值回归测试并通过。真机可确认红字格式保存和恢复；真机数据库表未直接查询。
+
+#### 问题 3：新笔记首次保存后没有历史版本入口
+
+- **表现：** 保存成功后“更多”菜单仍不显示“历史版本”，必须退出重进；
+- **原因判断：** 入口逻辑使用创建页面时的静态 `widget.noteId == 'new'`；
+- **最终处理：** 改为检查 VM 当前是否已有 note，并使用保存后实际 noteId 导航；
+- **处理结果：** widget 测试和真机 `DEVICE-TEST-3` 均确认首次保存后立即出现入口。
+
+#### 问题 4：未保存正文进入历史页时没有形成版本
+
+- **表现：** 编辑正文后不点保存，直接进入历史列表，版本链中没有这次正文变化；
+- **原因判断：** 跳转前没有调用编辑器保存；
+- **最终处理：** `_openHistory` 检查 dirty，先保存；保存失败提示并阻止导航；
+- **处理结果：** 自动化测试通过；真机追加 `BODY-CHANGE-3` 后直接进历史，版本 1 出现。
+
+#### 问题 5：恢复成功后列表刷新失败会误报恢复失败
+
+- **表现：** Repository 已完成恢复，但 ViewModel 重新拉列表异常时 `restore()` 返回 false；
+- **原因判断：** 把数据操作结果和后续 UI 刷新结果合并成同一个布尔结果；
+- **最终处理：** 恢复成功后尝试刷新，但刷新失败不改变恢复成功返回值；
+- **处理结果：** 对应 ViewModel 测试通过。
+
+#### 问题 6：widget 测试找不到“历史版本”菜单项
+
+- **表现：** 生产逻辑修复后测试仍失败；
+- **原因判断：** 测试点击“更多”后立即查找菜单，没有推进新 frame；不是生产代码缺陷；
+- **最终处理：** 使用测试辅助方法 pump 必要帧后再断言；
+- **处理结果：** 定向测试和全量测试恢复全绿。
+
+### 8. 验证方法与结果
+
+- 定向 Flutter 测试：7 个测试文件全部通过：
+  - `highlight_extractor_test.dart`
+  - `local_note_repository_test.dart`
+  - `note_version_view_model_test.dart`
+  - `note_editor_history_entry_test.dart`
+  - `note_editor_view_model_test.dart`
+  - `widget_test.dart`
+  - 相关既有 notes 测试
+- 全量 `flutter test`：12/12 通过；
+- `flutter analyze`：`No issues found!`；
+- `flutter build apk --debug`：成功，产物 `build/app/outputs/flutter-apk/app-debug.apk`；
+- 构建有一条非阻断警告：`quill_native_bridge_android` 仍使用 Kotlin Gradle Plugin 应用方式，属于未来 Flutter 兼容性提示，不影响本次 APK；
+- 真机 PJF110 安装：`adb install -r` 成功，保留原有 App 数据；
+- 真机 `DEVICE-TEST-3` 验证：
+  1. 编辑器正常加载，无持续转圈；
+  2. 输入 `BASE`，追加下划线 `UNDER3` 和红字 `RED3`；
+  3. 首次保存后不退出，立即看到“历史版本”入口；
+  4. 仅修改标题进入历史会保存标题，但不产生正文版本，符合本批快照范围；
+  5. 正文追加 `BODY-CHANGE-3` 后不手动保存，直接进入历史，dirty 自动保存并出现版本 1；
+  6. 恢复版本 1 后，正文从 `BASE UNDER3 RED3 BODY-CHANGE-3` 回到 `BASE UNDER3 RED3`；
+  7. 再次进入历史，看到版本 2、版本 1 倒序显示，证明恢复前正文已保留；
+- 真机日志：筛选结果未发现 `FATAL EXCEPTION` 或 `Unhandled Exception`，仅有正常输入/系统日志和一条 SurfaceView 警告；
+- **验证边界：**
+  - 未直接查询真机 `note_highlight` 表。App 数据库位于 `app_flutter/ruoke.sqlite`，设备无 `sqlite3`，UIAutomator 也不能检查表内容；重点表写入由解析器测试和 Repository 数据库测试覆盖；
+  - 真机保留了 `DEVICE-TEST-2`、`DEVICE-TEST-3 AUTO3 BODY3` 测试数据，未获授权前不删除；
+  - 用户尚未完成其自行复测，本批尚未 commit、未 push。
+
+### 9. 可复现要点
+
+- 必须在 `feature/notes-mvp` 分支继续，不要把第4批直接写入 main；
+- Quill 红色至少兼容 `red`、`#F44336`、`#FFF44336`，不能只测命名色；
+- 重点表是正文派生数据，保存时按 noteId 全量重建；正文 Delta JSON 才是唯一真实来源；
+- `update` 正文变化才建版本；标题-only 修改不会创建版本；
+- `restoreVersion` 必须先快照当前正文，再覆盖目标正文，并同步重建重点；
+- 恢复成功与版本列表刷新成功必须分开判断；
+- 编辑器 VM 的 `build()` 保持同步初始状态，外部 `init()` 负责异步加载，避免状态覆盖；
+- 新笔记保存后用 VM 当前 `note.id` 导航，不能继续依赖路由参数 `new`；
+- dirty 编辑器进入历史前必须先保存，保存失败不能离开页面；
+- widget 测试打开 PopupMenu 后需要 pump frame 再查找菜单项；
+- 真机重点表未直接查库，不得把自动化 Repository 验证描述成真机数据库验证；
+- 当前测试数据和 `beifen` 备份均保留，删除前必须由用户确认。

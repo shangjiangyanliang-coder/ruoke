@@ -15,7 +15,7 @@ class NoteHighlightDao extends DatabaseAccessor<AppDatabase>
   NoteHighlightDao(super.db);
 
   /// 写一条重点。
-  Future<int> insertHighlight(NoteHighlightEntity highlight) =>
+  Future<int> insertHighlight(NoteHighlightsCompanion highlight) =>
       into(noteHighlights).insert(highlight);
 
   /// 按笔记列出所有重点条。
@@ -28,7 +28,6 @@ class NoteHighlightDao extends DatabaseAccessor<AppDatabase>
 
   /// 删除某笔记全部重点（重存正文时先清后写，保持一致）。
   Future<int> deleteByNote(String noteId) {
-    return (delete(noteHighlights)..where((h) => h.noteId.equals(noteId)))
-        .go();
+    return (delete(noteHighlights)..where((h) => h.noteId.equals(noteId))).go();
   }
 }

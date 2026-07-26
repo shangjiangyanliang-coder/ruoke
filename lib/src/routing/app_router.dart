@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/notes/view/note_editor_view.dart';
 import '../features/notes/view/note_list_view.dart';
+import '../features/notes/view/note_version_list_view.dart';
 import '../features/notes/view/subject_manage_view.dart';
 import 'placeholder_page.dart';
 import 'settings_view.dart';
@@ -27,6 +28,11 @@ final GoRouter appRouter = GoRouter(
         return NoteEditorView(noteId: noteId, subjectId: subjectId);
       },
     ),
+    GoRoute(
+      path: '/notes/editor/:noteId/versions',
+      builder: (context, state) =>
+          NoteVersionListView(noteId: state.pathParameters['noteId']!),
+    ),
     // 底部 5 标签导航 shell
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
@@ -34,55 +40,59 @@ final GoRouter appRouter = GoRouter(
       },
       branches: [
         // tab0 首页（占位）
-        StatefulShellBranch(routes: [
-          GoRoute(
-            path: '/',
-            builder: (context, state) => const PlaceholderPage(
-              title: '首页',
-              hint: '学习仪表盘（待开发）',
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, state) =>
+                  const PlaceholderPage(title: '首页', hint: '学习仪表盘（待开发）'),
             ),
-          ),
-        ]),
+          ],
+        ),
         // tab1 笔记（已实现）
-        StatefulShellBranch(routes: [
-          GoRoute(
-            path: '/notes',
-            builder: (context, state) => const NoteListView(),
-          ),
-        ]),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/notes',
+              builder: (context, state) => const NoteListView(),
+            ),
+          ],
+        ),
         // tab2 题库（占位）
-        StatefulShellBranch(routes: [
-          GoRoute(
-            path: '/quiz',
-            builder: (context, state) => const PlaceholderPage(
-              title: '题库',
-              hint: '题库浏览（待开发）',
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/quiz',
+              builder: (context, state) =>
+                  const PlaceholderPage(title: '题库', hint: '题库浏览（待开发）'),
             ),
-          ),
-        ]),
+          ],
+        ),
         // tab3 学习（占位）
-        StatefulShellBranch(routes: [
-          GoRoute(
-            path: '/study',
-            builder: (context, state) => const PlaceholderPage(
-              title: '学习',
-              hint: '每日清单（待开发）',
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/study',
+              builder: (context, state) =>
+                  const PlaceholderPage(title: '学习', hint: '每日清单（待开发）'),
             ),
-          ),
-        ]),
+          ],
+        ),
         // tab4 我的（设置，含学科管理入口）
-        StatefulShellBranch(routes: [
-          GoRoute(
-            path: '/settings',
-            builder: (context, state) => const SettingsView(),
-            routes: [
-              GoRoute(
-                path: 'subjects',
-                builder: (context, state) => const SubjectManageView(),
-              ),
-            ],
-          ),
-        ]),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/settings',
+              builder: (context, state) => const SettingsView(),
+              routes: [
+                GoRoute(
+                  path: 'subjects',
+                  builder: (context, state) => const SubjectManageView(),
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
     ),
   ],
@@ -104,11 +114,31 @@ class ScaffoldWithNavBar extends StatelessWidget {
           initialLocation: i == navigationShell.currentIndex,
         ),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '首页'),
-          NavigationDestination(icon: Icon(Icons.book_outlined), selectedIcon: Icon(Icons.book), label: '笔记'),
-          NavigationDestination(icon: Icon(Icons.quiz_outlined), selectedIcon: Icon(Icons.quiz), label: '题库'),
-          NavigationDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: '学习'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '我的'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '首页',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.book_outlined),
+            selectedIcon: Icon(Icons.book),
+            label: '笔记',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.quiz_outlined),
+            selectedIcon: Icon(Icons.quiz),
+            label: '题库',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school),
+            label: '学习',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: '我的',
+          ),
         ],
       ),
     );

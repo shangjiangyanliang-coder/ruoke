@@ -5,18 +5,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/note.dart';
+import '../models/note_version.dart';
 import 'note_editor_view_model.dart';
 import 'note_list_view_model.dart';
+import 'note_version_view_model.dart';
 import 'subject_manage_view_model.dart';
 import 'subject_tree_view_model.dart';
 
 /// 笔记列表 ViewModel Provider（保留，第3批 UI 改用 B1 树，此 Provider 暂备用）。
-final noteListVmProvider =
-    AsyncNotifierProvider<NoteListVm, List<Note>>(NoteListVm.new);
+final noteListVmProvider = AsyncNotifierProvider<NoteListVm, List<Note>>(
+  NoteListVm.new,
+);
 
 /// 笔记编辑器 ViewModel Provider（普通 AsyncNotifier，arg 经 init() 传入）。
 final noteEditorVmProvider =
     AsyncNotifierProvider<NoteEditorVm, NoteEditorState>(NoteEditorVm.new);
+
+/// 单条笔记历史版本 ViewModel Provider；按 noteId 隔离并随页面销毁。
+final noteVersionVmProvider = AsyncNotifierProvider.autoDispose
+    .family<NoteVersionVm, List<NoteVersion>, String>(NoteVersionVm.new);
 
 /// B1 笔记分级树 ViewModel Provider（书-章-节-笔记嵌套树 + 未分类组）。
 final subjectTreeVmProvider =
@@ -25,4 +32,5 @@ final subjectTreeVmProvider =
 /// 学科管理 ViewModel Provider（我的tab 学科管理入口）。
 final subjectManageVmProvider =
     AsyncNotifierProvider<SubjectManageVm, SubjectManageState>(
-        SubjectManageVm.new);
+      SubjectManageVm.new,
+    );

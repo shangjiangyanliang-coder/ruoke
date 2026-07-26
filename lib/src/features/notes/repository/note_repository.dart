@@ -15,8 +15,8 @@ abstract class NoteRepository {
   /// 按 id 取一条。
   Future<Result<Note?>> getById(String id);
 
-  /// 新建笔记（返回新 id）。需要传 subjectId（第3批起由 UI 选；第2批先用占位科目）。
-  Future<Result<String>> create({
+  /// 新建笔记并返回完整领域对象，保证调用方直接获得数据库生成后的真实状态。
+  Future<Result<Note>> create({
     required String subjectId,
     String? title,
     String? contentJson,
@@ -38,4 +38,10 @@ abstract class NoteRepository {
 
   /// 列出某笔记历史版本（第4批用，第2批先备好口子）。
   Future<Result<List<NoteVersion>>> listVersions(String noteId);
+
+  /// 将某个历史版本恢复为当前正文，并保留恢复前的正文快照。
+  Future<Result<void>> restoreVersion({
+    required String noteId,
+    required int versionNo,
+  });
 }

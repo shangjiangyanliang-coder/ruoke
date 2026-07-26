@@ -27,28 +27,28 @@ class NoteListVm extends AsyncNotifier<List<Note>> {
 
   /// 新建一条空草稿笔记，返回新 id（供路由跳编辑器）。
   Future<String> createEmpty() async {
-    final r = await ref.read(noteRepositoryProvider).create(
+    final r = await ref
+        .read(noteRepositoryProvider)
+        .create(
           subjectId: defaultSubjectId,
           title: null,
           contentJson: null,
           isDraft: true,
         );
-    if (r is Success<String>) {
-      final id = r.value;
+    if (r is Success<Note>) {
+      final id = r.value.id;
       // 刷新列表
       state = AsyncData(await _list());
       return id;
     }
-    throw (r as Failure<String>).exception;
+    throw (r as Failure<Note>).exception;
   }
 
   /// 软删某笔记并从本地状态移除。
   Future<void> softDelete(String id) async {
     final r = await ref.read(noteRepositoryProvider).softDelete(id);
     if (r is Success) {
-      state = AsyncData(
-        (state.value ?? []).where((n) => n.id != id).toList(),
-      );
+      state = AsyncData((state.value ?? []).where((n) => n.id != id).toList());
     } else {
       throw (r as Failure).exception;
     }
