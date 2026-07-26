@@ -8,9 +8,11 @@ import '../models/note.dart';
 import '../models/note_version.dart';
 import 'note_editor_view_model.dart';
 import 'note_list_view_model.dart';
+import 'note_search_view_model.dart';
 import 'note_version_view_model.dart';
 import 'subject_manage_view_model.dart';
 import 'subject_tree_view_model.dart';
+import 'tag_management_view_model.dart';
 
 /// 笔记列表 ViewModel Provider（保留，第3批 UI 改用 B1 树，此 Provider 暂备用）。
 final noteListVmProvider = AsyncNotifierProvider<NoteListVm, List<Note>>(
@@ -34,3 +36,17 @@ final subjectManageVmProvider =
     AsyncNotifierProvider<SubjectManageVm, SubjectManageState>(
       SubjectManageVm.new,
     );
+
+/// 标签管理页 ViewModel Provider。
+final tagManagementVmProvider =
+    AsyncNotifierProvider<TagManagementVm, TagManagementState>(
+      TagManagementVm.new,
+    );
+
+/// 单条笔记标签 Provider；按 noteId 隔离并随使用方销毁。
+final noteTagsVmProvider = AsyncNotifierProvider.autoDispose
+    .family<NoteTagsVm, NoteTagsState, String>(NoteTagsVm.new);
+
+/// 笔记搜索条件与结果 ViewModel Provider。
+final noteSearchVmProvider =
+    AsyncNotifierProvider<NoteSearchVm, NoteSearchState>(NoteSearchVm.new);

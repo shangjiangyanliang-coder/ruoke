@@ -10,8 +10,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/app_database.dart';
 import 'repository/local_note_repository.dart';
 import 'repository/local_subject_repository.dart';
+import 'repository/local_tag_repository.dart';
 import 'repository/note_repository.dart';
 import 'repository/subject_repository.dart';
+import 'repository/tag_repository.dart';
 
 /// 数据库单例 Provider（全项目共享）。后续抽到 data/ 全局，暂放笔记模块。
 final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -23,11 +25,18 @@ final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((ref) {
 /// NoteRepository Provider：注入 db，返回 LocalNoteRepository。
 final Provider<NoteRepository> noteRepositoryProvider =
     Provider<NoteRepository>((ref) {
-  return LocalNoteRepository(ref.watch(appDatabaseProvider));
-});
+      return LocalNoteRepository(ref.watch(appDatabaseProvider));
+    });
 
 /// SubjectRepository Provider：注入 db，返回 LocalSubjectRepository。
 final Provider<SubjectRepository> subjectRepositoryProvider =
     Provider<SubjectRepository>((ref) {
-  return LocalSubjectRepository(ref.watch(appDatabaseProvider));
+      return LocalSubjectRepository(ref.watch(appDatabaseProvider));
+    });
+
+/// TagRepository Provider：注入 db，管理标签及笔记标签关联。
+final Provider<TagRepository> tagRepositoryProvider = Provider<TagRepository>((
+  ref,
+) {
+  return LocalTagRepository(ref.watch(appDatabaseProvider));
 });
