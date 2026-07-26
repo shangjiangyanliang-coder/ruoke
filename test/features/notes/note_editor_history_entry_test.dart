@@ -36,6 +36,7 @@ void main() {
     );
     await _waitForEditor(tester);
 
+    await tester.enterText(find.byType(TextField), '首次保存');
     await tester.tap(find.byTooltip('保存'));
     await _pumpFrames(tester);
     expect(find.byType(QuillEditor), findsOneWidget);

@@ -10,6 +10,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../view_model/note_editor_view_model.dart';
 import '../view_model/view_model_providers.dart';
 
 /// 笔记编辑器页（B1.a 最小占位）。
@@ -28,15 +29,44 @@ class NoteEditorView extends ConsumerStatefulWidget {
 class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   QuillController? _controller;
   TextEditingController? _titleCtrl;
+  String? _activeSessionKey;
+  bool _sessionInitialized = false;
+
+  String get _sessionKey => '${widget.noteId}|${widget.subjectId ?? ''}';
 
   @override
   void initState() {
     super.initState();
-    // 进入即触发 VM 加载对应 noteId（新建态带 subjectId 定级）
+    _startEditorSession();
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteEditorView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.noteId != widget.noteId ||
+        oldWidget.subjectId != widget.subjectId) {
+      _resetControllers();
+      _startEditorSession();
+    }
+  }
+
+  /// 为当前路由启动独立初始化；旧会话完成时不得解锁新页面。
+  void _startEditorSession() {
+    final sessionKey = _sessionKey;
+    _activeSessionKey = sessionKey;
+    _sessionInitialized = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(noteEditorVmProvider.notifier)
-          .init(widget.noteId, subjectId: widget.subjectId);
+      _initializeEditorSession(sessionKey);
+    });
+  }
+
+  Future<void> _initializeEditorSession(String sessionKey) async {
+    await ref
+        .read(noteEditorVmProvider.notifier)
+        .init(widget.noteId, subjectId: widget.subjectId);
+    if (!mounted || _activeSessionKey != sessionKey) return;
+    setState(() {
+      _sessionInitialized = true;
     });
   }
 
@@ -77,13 +107,24 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   String _currentDeltaJson() =>
       jsonEncode(_controller!.document.toDelta().toJson());
 
-  Future<bool> _save() async {
+  bool _hasVisibleContent() =>
+      _controller!.document.toPlainText().trim().isNotEmpty;
+
+  Future<NoteSaveResult> _save() async {
+    if (!_sessionInitialized ||
+        _controller == null ||
+        _titleCtrl == null ||
+        ref.read(noteEditorVmProvider).value?.ready != true ||
+        ref.read(noteEditorVmProvider).value?.saving == true) {
+      return NoteSaveResult.failed;
+    }
     final title = _titleCtrl?.text.trim();
     return ref
         .read(noteEditorVmProvider.notifier)
         .save(
           title: (title == null || title.isEmpty) ? null : title,
           contentJson: _currentDeltaJson(),
+          hasVisibleContent: _hasVisibleContent(),
         );
   }
 
@@ -93,12 +134,18 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final messenger = ScaffoldMessenger.of(context);
     var editorState = ref.read(noteEditorVmProvider).value;
     if (editorState?.dirty == true) {
-      final saved = await _save();
-      if (!saved) {
+      final result = await _save();
+      if (result == NoteSaveResult.failed) {
         if (context.mounted) {
           messenger.showSnackBar(
             const SnackBar(content: Text('保存失败，无法打开历史版本')),
           );
+        }
+        return;
+      }
+      if (result == NoteSaveResult.skippedEmpty) {
+        if (context.mounted) {
+          messenger.showSnackBar(const SnackBar(content: Text('空笔记不会保存')));
         }
         return;
       }
@@ -146,8 +193,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       );
       switch (choice) {
         case _DiscardChoice.save:
-          final ok = await _save();
-          if (ok && context.mounted) context.pop();
+          final result = await _save();
+          if (result != NoteSaveResult.failed && context.mounted) {
+            context.pop();
+          }
         case _DiscardChoice.discard:
           if (context.mounted) context.pop();
         case _DiscardChoice.cancel:
@@ -161,7 +210,16 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(noteEditorVmProvider);
+    final providerState = ref.watch(noteEditorVmProvider);
+    final state = _sessionInitialized
+        ? providerState
+        : const AsyncLoading<NoteEditorState>();
+    final canSave =
+        _sessionInitialized &&
+        state.value?.ready == true &&
+        state.value?.saving != true &&
+        _controller != null &&
+        _titleCtrl != null;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -178,14 +236,21 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             IconButton(
               icon: const Icon(Icons.save_outlined),
               tooltip: '保存',
-              onPressed: () async {
-                final ok = await _save();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(ok ? '已保存' : '保存失败')));
-                }
-              },
+              onPressed: canSave
+                  ? () async {
+                      final result = await _save();
+                      if (context.mounted) {
+                        final message = switch (result) {
+                          NoteSaveResult.saved => '已保存',
+                          NoteSaveResult.skippedEmpty => '空笔记不会保存',
+                          NoteSaveResult.failed => '保存失败',
+                        };
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(message)));
+                      }
+                    }
+                  : null,
             ),
             PopupMenuButton<String>(
               tooltip: '更多',
