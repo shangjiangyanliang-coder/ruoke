@@ -22,4 +22,22 @@ class NoteTagDao extends DatabaseAccessor<AppDatabase> with _$NoteTagDaoMixin {
   Future<List<NoteTagEntity>> listByNote(String noteId) {
     return (select(noteTags)..where((nt) => nt.noteId.equals(noteId))).get();
   }
+
+  /// 删除笔记的全部标签关联，供替换标签事务使用。
+  Future<int> deleteByNote(String noteId) {
+    return (delete(noteTags)..where((link) => link.noteId.equals(noteId))).go();
+  }
+
+  /// 删除标签的全部笔记关联，供删除标签事务使用。
+  Future<int> deleteByTag(String tagId) {
+    return (delete(noteTags)..where((link) => link.tagId.equals(tagId))).go();
+  }
+
+  /// 统计关联到标签的未软删除笔记数量。
+  Future<int> countActiveNotesForTag(String tagId) async {
+    final query = select(noteTags).join([
+      innerJoin(db.notes, db.notes.id.equalsExp(noteTags.noteId)),
+    ])..where(noteTags.tagId.equals(tagId) & db.notes.isDeleted.equals(false));
+    return (await query.get()).length;
+  }
 }
