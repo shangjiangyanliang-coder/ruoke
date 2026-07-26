@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
+import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
@@ -149,6 +150,10 @@ class _FakeNoteRepository implements NoteRepository {
 
   @override
   Future<Result<List<Note>>> listAll() => throw UnimplementedError();
+
+  @override
+  Future<Result<List<Note>>> search(NoteSearchQuery query) =>
+      throw UnimplementedError();
 
   @override
   Future<Result<Note?>> getById(String id) => throw UnimplementedError();

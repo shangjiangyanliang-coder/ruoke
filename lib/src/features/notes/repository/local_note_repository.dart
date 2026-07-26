@@ -15,6 +15,7 @@ import '../../../utils/delta_plain_text.dart';
 import '../../../utils/id_generator.dart';
 import '../../../utils/time_utils.dart';
 import '../models/note.dart';
+import '../models/note_search_query.dart';
 import '../models/note_version.dart';
 import '../utils/highlight_extractor.dart';
 import 'note_repository.dart';
@@ -44,6 +45,26 @@ class LocalNoteRepository implements NoteRepository {
     },
     orElse: (e) =>
         const Failure(DatabaseException('读取笔记失败', techDetail: 'getById')),
+  );
+
+  @override
+  Future<Result<List<Note>>> search(NoteSearchQuery query) => guard(
+    () async {
+      final keyword = query.keyword.trim();
+      final sortOrder = switch (query.sortOrder) {
+        NoteSortOrder.updatedDesc => NoteDaoSortOrder.updatedDesc,
+        NoteSortOrder.updatedAsc => NoteDaoSortOrder.updatedAsc,
+        NoteSortOrder.titleAsc => NoteDaoSortOrder.titleAsc,
+      };
+      final entities = await _noteDao.search(
+        keyword: keyword.isEmpty ? null : keyword,
+        tagIds: query.tagIds,
+        sortOrder: sortOrder,
+      );
+      return entities.map(Note.fromEntity).toList();
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('搜索笔记失败', techDetail: 'search')),
   );
 
   @override

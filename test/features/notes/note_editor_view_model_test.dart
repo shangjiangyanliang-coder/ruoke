@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
+import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
@@ -304,6 +305,10 @@ class _CreateReturnsNoteRepository implements NoteRepository {
 
   @override
   Future<Result<List<Note>>> listAll() async => const Success([]);
+
+  @override
+  Future<Result<List<Note>>> search(NoteSearchQuery query) async =>
+      const Success([]);
 
   @override
   Future<Result<List<NoteVersion>>> listVersions(String noteId) async =>

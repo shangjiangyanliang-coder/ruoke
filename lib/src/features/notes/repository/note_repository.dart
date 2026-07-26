@@ -5,6 +5,7 @@
 //       详见技术方案 A §2.2/§6.2 + B §五。
 import '../../../data/errors/result.dart';
 import '../models/note.dart';
+import '../models/note_search_query.dart';
 import '../models/note_version.dart';
 
 /// 笔记 Repository 接口。
@@ -14,6 +15,9 @@ abstract class NoteRepository {
 
   /// 按 id 取一条。
   Future<Result<Note?>> getById(String id);
+
+  /// 按关键词、标签并集和排序搜索未软删除笔记。
+  Future<Result<List<Note>>> search(NoteSearchQuery query);
 
   /// 新建笔记并返回完整领域对象，保证调用方直接获得数据库生成后的真实状态。
   Future<Result<Note>> create({

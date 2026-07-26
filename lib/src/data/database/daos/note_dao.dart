@@ -9,6 +9,9 @@ import '../tables/note_table.dart';
 
 part 'note_dao.g.dart';
 
+/// DAO 内部排序类型，避免数据层依赖 feature 领域模型。
+enum NoteDaoSortOrder { updatedDesc, updatedAsc, titleAsc }
+
 /// 笔记 DAO。
 @DriftAccessor(tables: [Notes])
 class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
@@ -26,6 +29,41 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
           ..where((n) => n.isDeleted.equals(false))
           ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)]))
         .get();
+  }
+
+  /// 搜索未软删除笔记；多标签为并集，标签子查询避免重复笔记。
+  Future<List<NoteEntity>> search({
+    String? keyword,
+    required Set<String> tagIds,
+    required NoteDaoSortOrder sortOrder,
+  }) async {
+    final query = select(notes);
+
+    var predicate = notes.isDeleted.equals(false);
+    if (keyword != null) {
+      final pattern = '%$keyword%';
+      predicate =
+          predicate &
+          (notes.title.like(pattern) | notes.plainText.like(pattern));
+    }
+    if (tagIds.isNotEmpty) {
+      final taggedNoteIds = db.selectOnly(db.noteTags)
+        ..addColumns([db.noteTags.noteId])
+        ..where(db.noteTags.tagId.isIn(tagIds));
+      predicate = predicate & notes.id.isInQuery(taggedNoteIds);
+    }
+    query
+      ..where((_) => predicate)
+      ..orderBy([
+        (n) => switch (sortOrder) {
+          NoteDaoSortOrder.updatedDesc => OrderingTerm.desc(n.updatedAt),
+          NoteDaoSortOrder.updatedAsc => OrderingTerm.asc(n.updatedAt),
+          NoteDaoSortOrder.titleAsc => OrderingTerm.asc(n.title),
+        },
+        (n) => OrderingTerm.asc(n.id),
+      ]);
+
+    return query.get();
   }
 
   /// 按 subject 列出未软删笔记（不含已删）。
@@ -53,8 +91,9 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
     return (update(notes)..where((n) => n.id.equals(id))).write(
       NotesCompanion(
         title: title == null ? const Value.absent() : Value(title),
-        contentJson:
-            contentJson == null ? const Value.absent() : Value(contentJson),
+        contentJson: contentJson == null
+            ? const Value.absent()
+            : Value(contentJson),
         plainText: plainText == null ? const Value.absent() : Value(plainText),
         isDraft: isDraft == null ? const Value.absent() : Value(isDraft),
         updatedAt: updatedAt == null ? const Value.absent() : Value(updatedAt),
