@@ -205,6 +205,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(tags.listCallCount, 2);
   });
+
+  testWidgets('标签绑定失败后打开历史会重试并阻止跳转', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final tags = _FailingAttachTagRepository();
+
+    await _pumpEditor(tester, db, noteId: 'new', tagRepository: tags);
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '保留待保存标签');
+    await _addTag(tester, '不能被历史清空');
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('历史版本'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('editor-tag-input')), findsOneWidget);
+    expect(find.text('不能被历史清空'), findsOneWidget);
+    expect(find.text('笔记已保存，但标签保存失败'), findsWidgets);
+  });
 }
 
 Future<void> _pumpEditor(

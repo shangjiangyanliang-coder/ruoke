@@ -423,7 +423,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   Future<void> _openHistory(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     var editorState = ref.read(noteEditorVmProvider).value;
-    if (editorState?.dirty == true) {
+    if (editorState?.dirty == true || _pendingTagNames.isNotEmpty) {
       final result = await _save();
       if (result == NoteSaveResult.failed ||
           result == NoteSaveResult.savedWithTagFailure) {
