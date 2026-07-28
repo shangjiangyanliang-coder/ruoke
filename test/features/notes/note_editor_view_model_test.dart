@@ -5,12 +5,16 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
+import 'package:ruoke/src/features/notes/models/tag.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
+import 'package:ruoke/src/features/notes/repository/tag_repository.dart';
 import 'package:ruoke/src/features/notes/view_model/note_editor_view_model.dart';
 import 'package:ruoke/src/features/notes/view_model/view_model_providers.dart';
 
@@ -32,7 +36,10 @@ void main() {
   test('首次创建成功后编辑器立即持有真实笔记并可继续更新', () async {
     final repository = _CreateReturnsNoteRepository();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(_TagRepositoryStub(const [])),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -124,7 +131,10 @@ void main() {
     final repository = _CreateReturnsNoteRepository()
       ..noteToLoad = _note(id: 'existing-note', title: '原标题');
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(_TagRepositoryStub(const [])),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -192,7 +202,10 @@ void main() {
   test('较慢的旧更新保存完成后不会覆盖随后加载的新笔记', () async {
     final repository = _DelayedUpdateRepository();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(_TagRepositoryStub(const [])),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -218,7 +231,10 @@ void main() {
   test('更新保存期间继续编辑时返回后仍保留未保存标记', () async {
     final repository = _DelayedUpdateRepository();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(_TagRepositoryStub(const [])),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -267,12 +283,81 @@ void main() {
     expect(await secondSave, NoteSaveResult.failed);
     expect(repository.createCallCount, 1);
   });
+
+  test('已有标签作为编辑器草稿加载且保存前不写数据库', () async {
+    final repository = _CreateReturnsNoteRepository()
+      ..noteToLoad = _note(id: 'existing-note', title: '标题');
+    final tags = _TagRepositoryStub(const ['旧标签']);
+    final container = ProviderContainer(
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(tags),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(noteEditorVmProvider.notifier);
+    await notifier.init('existing-note');
+    expect(
+      container.read(noteEditorVmProvider).value?.tagNames,
+      const ['旧标签'],
+    );
+
+    notifier.addTagName(' 新标签 ');
+    notifier.removeTagName('旧标签');
+
+    final draft = container.read(noteEditorVmProvider).value;
+    expect(draft?.tagNames, const ['新标签']);
+    expect(draft?.dirty, isTrue);
+    expect(repository.updateCallCount, 0);
+
+    final result = await notifier.save(
+      title: '标题',
+      contentJson: '[{"insert":"正文\\n"}]',
+      hasVisibleContent: true,
+    );
+
+    expect(result, NoteSaveResult.saved);
+    expect(repository.lastUpdateTagNames, const ['新标签']);
+  });
+
+  test('标签保存失败时保留标签草稿和未保存状态', () async {
+    final repository = _CreateReturnsNoteRepository()
+      ..noteToLoad = _note(id: 'existing-note', title: '标题')
+      ..failUpdate = true;
+    final container = ProviderContainer(
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(
+          _TagRepositoryStub(const ['旧标签']),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(noteEditorVmProvider.notifier);
+    await notifier.init('existing-note');
+    notifier.addTagName('新标签');
+
+    final result = await notifier.save(
+      title: '标题',
+      contentJson: '[{"insert":"正文\\n"}]',
+      hasVisibleContent: true,
+    );
+
+    expect(result, NoteSaveResult.failed);
+    final state = container.read(noteEditorVmProvider).value;
+    expect(state?.tagNames, const ['旧标签', '新标签']);
+    expect(state?.dirty, isTrue);
+  });
 }
 
 class _CreateReturnsNoteRepository implements NoteRepository {
   int createCallCount = 0;
   int updateCallCount = 0;
   Note? noteToLoad;
+  bool failUpdate = false;
+  List<String>? lastUpdateTagNames;
 
   @override
   Future<Result<Note>> create({
@@ -302,6 +387,10 @@ class _CreateReturnsNoteRepository implements NoteRepository {
     Iterable<String>? tagNames,
   }) async {
     updateCallCount++;
+    lastUpdateTagNames = tagNames?.toList();
+    if (failUpdate) {
+      return const Failure<void>(DatabaseException('模拟保存失败'));
+    }
     return const Success<void>(null);
   }
 
@@ -324,6 +413,67 @@ class _CreateReturnsNoteRepository implements NoteRepository {
 
   @override
   Future<Result<void>> softDelete(String id) async => const Success<void>(null);
+}
+
+class _TagRepositoryStub implements TagRepository {
+  final List<String> names;
+
+  _TagRepositoryStub(this.names);
+
+  @override
+  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success(
+    [
+      for (var index = 0; index < names.length; index++)
+        Tag(
+          id: 'tag-$index',
+          name: names[index],
+          color: null,
+          createdAt: 1,
+        ),
+    ],
+  );
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> createTag({required String name, String? color}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteTag(String id) => throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<TagWithCount>>> listTags() => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> renameTag({required String id, required String name}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> replaceNoteTags({
+    required String noteId,
+    required List<String> tagIds,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) =>
+      throw UnimplementedError();
 }
 
 class _DelayedLoadRepository extends _CreateReturnsNoteRepository {

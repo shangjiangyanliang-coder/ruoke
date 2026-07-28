@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/errors/result.dart';
 import '../models/note.dart';
+import '../models/tag.dart';
 import '../note_constants.dart';
 import '../providers.dart';
 
@@ -36,6 +37,9 @@ class NoteEditorState {
   /// null 则回退 defaultSubjectId（未分类）。
   final String? subjectId;
 
+  /// 当前编辑会话中的标签草稿；保存前不写数据库。
+  final List<String> tagNames;
+
   const NoteEditorState({
     this.note,
     this.dirty = false,
@@ -43,6 +47,7 @@ class NoteEditorState {
     this.ready = false,
     this.saving = false,
     this.subjectId,
+    this.tagNames = const [],
   });
 
   NoteEditorState copyWith({
@@ -52,6 +57,7 @@ class NoteEditorState {
     bool? ready,
     bool? saving,
     String? subjectId,
+    List<String>? tagNames,
   }) => NoteEditorState(
     note: note ?? this.note,
     dirty: dirty ?? this.dirty,
@@ -59,6 +65,7 @@ class NoteEditorState {
     ready: ready ?? this.ready,
     saving: saving ?? this.saving,
     subjectId: subjectId ?? this.subjectId,
+    tagNames: tagNames ?? this.tagNames,
   );
 }
 
@@ -97,7 +104,22 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
       if (note == null) {
         throw StateError('笔记不存在: $noteId');
       }
-      state = AsyncData(NoteEditorState(note: note, ready: true));
+      final tagsResult = await ref
+          .read(tagRepositoryProvider)
+          .listTagsForNote(noteId);
+      if (tagsResult is! Success<List<Tag>>) {
+        throw (tagsResult as Failure<List<Tag>>).exception;
+      }
+      if (generation != _initGeneration) return;
+      state = AsyncData(
+        NoteEditorState(
+          note: note,
+          ready: true,
+          tagNames: List.unmodifiable(
+            tagsResult.value.map((tag) => tag.name),
+          ),
+        ),
+      );
     } catch (e, s) {
       if (generation == _initGeneration) {
         state = AsyncError(e, s);
@@ -114,6 +136,36 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
         state = AsyncData(cur.copyWith(dirty: true));
       }
     }
+  }
+
+  /// 只修改标签草稿；真正的标签创建和关联由保存事务完成。
+  void addTagName(String name) {
+    final cur = state.value;
+    if (cur == null || !cur.ready) return;
+    final normalized = name.trim();
+    if (normalized.isEmpty || cur.tagNames.contains(normalized)) return;
+    _editRevision++;
+    state = AsyncData(
+      cur.copyWith(
+        dirty: true,
+        tagNames: List.unmodifiable([...cur.tagNames, normalized]),
+      ),
+    );
+  }
+
+  /// 从当前编辑草稿移除标签，不立即修改数据库。
+  void removeTagName(String name) {
+    final cur = state.value;
+    if (cur == null || !cur.ready || !cur.tagNames.contains(name)) return;
+    _editRevision++;
+    state = AsyncData(
+      cur.copyWith(
+        dirty: true,
+        tagNames: List.unmodifiable(
+          cur.tagNames.where((tagName) => tagName != name),
+        ),
+      ),
+    );
   }
 
   /// 保存标题与正文。新笔记没有任何可见内容时跳过创建。
@@ -142,6 +194,7 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
           title: title,
           contentJson: contentJson,
           isDraft: false,
+          tagNames: cur.tagNames,
         );
         if (r is! Success<Note>) return NoteSaveResult.failed;
         final note = r.value;
@@ -153,6 +206,7 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
               note: note,
               ready: true,
               dirty: revision != _editRevision,
+              tagNames: cur.tagNames,
             ),
           );
         }
@@ -162,6 +216,7 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
         id: cur.note!.id,
         title: title,
         contentJson: contentJson,
+        tagNames: cur.tagNames,
       );
       if (r is Success && generation == _initGeneration) {
         final current = state.value;

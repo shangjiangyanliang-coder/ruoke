@@ -14,8 +14,11 @@ import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
+import 'package:ruoke/src/features/notes/models/tag.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
+import 'package:ruoke/src/features/notes/repository/tag_repository.dart';
 import 'package:ruoke/src/features/notes/view/note_editor_view.dart';
 
 void main() {
@@ -86,7 +89,10 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: _LocalizedRouterApp(router: router),
       ),
     );
@@ -112,7 +118,10 @@ void main() {
       );
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: const _LocalizedApp(home: NoteEditorView(noteId: 'old-note')),
       ),
     );
@@ -127,7 +136,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: const _LocalizedApp(home: NoteEditorView(noteId: 'new')),
       ),
     );
@@ -148,7 +160,10 @@ void main() {
     final repository = _StabilityRepository()..failGet = true;
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: const _LocalizedApp(
           home: NoteEditorView(noteId: 'missing-note'),
         ),
@@ -165,7 +180,10 @@ void main() {
       ..delayedGet = Completer<Result<Note?>>();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: const _LocalizedApp(
           home: NoteEditorView(noteId: 'delayed-note'),
         ),
@@ -183,7 +201,10 @@ void main() {
     final repository = _StabilityRepository()..failGet = true;
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: const _LocalizedApp(
           home: NoteEditorView(noteId: 'missing-note'),
         ),
@@ -235,7 +256,10 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: _LocalizedRouterApp(router: router),
       ),
     );
@@ -279,7 +303,10 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+        ],
         child: _LocalizedRouterApp(router: router),
       ),
     );
@@ -353,7 +380,10 @@ Future<void> _pumpEditor(
 ) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        tagRepositoryProvider.overrideWithValue(const _EmptyTagRepository()),
+      ],
       child: const _LocalizedApp(home: NoteEditorView(noteId: 'new')),
     ),
   );
@@ -412,6 +442,56 @@ class _LocalizedRouterApp extends StatelessWidget {
       routerConfig: router,
     );
   }
+}
+
+class _EmptyTagRepository implements TagRepository {
+  const _EmptyTagRepository();
+
+  @override
+  Future<Result<List<Tag>>> listTagsForNote(String noteId) async =>
+      const Success([]);
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> createTag({required String name, String? color}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteTag(String id) => throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<TagWithCount>>> listTags() async => const Success([]);
+
+  @override
+  Future<Result<void>> renameTag({required String id, required String name}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> replaceNoteTags({
+    required String noteId,
+    required List<String> tagIds,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) =>
+      throw UnimplementedError();
 }
 
 class _StabilityRepository implements NoteRepository {

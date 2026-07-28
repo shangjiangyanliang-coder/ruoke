@@ -31,13 +31,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   QuillController? _controller;
   TextEditingController? _titleCtrl;
   final TextEditingController _tagInputController = TextEditingController();
-  final Set<String> _pendingTagNames = {};
   String? _activeSessionKey;
   String _tagInput = '';
   String? _tagSaveError;
   bool _sessionInitialized = false;
-  bool _tagOperationInProgress = false;
-  int _tagOperationGeneration = 0;
 
   String get _sessionKey => '${widget.noteId}|${widget.subjectId ?? ''}';
 
@@ -52,8 +49,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.noteId != widget.noteId ||
         oldWidget.subjectId != widget.subjectId) {
-      _tagOperationGeneration++;
-      _tagOperationInProgress = false;
       _resetControllers();
       _startEditorSession();
     }
@@ -124,7 +119,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     if (!_sessionInitialized ||
         _controller == null ||
         _titleCtrl == null ||
-        _tagOperationInProgress ||
         ref.read(noteEditorVmProvider).value?.ready != true ||
         ref.read(noteEditorVmProvider).value?.saving == true) {
       return NoteSaveResult.failed;
@@ -137,141 +131,28 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           contentJson: _currentDeltaJson(),
           hasVisibleContent: _hasVisibleContent(),
         );
-    if (result == NoteSaveResult.saved && _pendingTagNames.isNotEmpty) {
-      final tagsSaved = await _flushPendingTags();
-      if (!tagsSaved) return NoteSaveResult.savedWithTagFailure;
-    }
     return result;
   }
 
-  bool _isCurrentTagOperation(String sessionKey, int operationGeneration) =>
-      mounted &&
-      _activeSessionKey == sessionKey &&
-      _tagOperationGeneration == operationGeneration;
-
-  Future<void> _submitTagName([Tag? suggestion]) async {
-    if (_tagOperationInProgress) return;
+  void _submitTagName([Tag? suggestion]) {
     final name = (suggestion?.name ?? _tagInputController.text).trim();
     if (name.isEmpty) {
       setState(() => _tagSaveError = '标签名称不能为空');
       return;
     }
-    final noteId = ref.read(noteEditorVmProvider).value?.note?.id;
-    if (noteId == null) {
-      setState(() {
-        _pendingTagNames.add(name);
-        _tagInputController.clear();
-        _tagInput = '';
-        _tagSaveError = null;
-      });
-      return;
-    }
-
-    final sessionKey = _sessionKey;
-    final generation = ++_tagOperationGeneration;
-    setState(() => _tagOperationInProgress = true);
-    final saved = await ref
-        .read(noteTagsVmProvider(noteId).notifier)
-        .addByName(name);
-    if (!_isCurrentTagOperation(sessionKey, generation)) return;
-    if (saved) {
-      setState(() {
-        _tagInputController.clear();
-        _tagInput = '';
-        _tagSaveError = null;
-      });
-      await ref.read(tagManagementVmProvider.notifier).refresh();
-    } else {
-      final message =
-          ref
-              .read(noteTagsVmProvider(noteId))
-              .value
-              ?.actionError
-              ?.userMessage ??
-          '标签添加失败，请重试';
-      setState(() => _tagSaveError = message);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    }
-    if (_isCurrentTagOperation(sessionKey, generation)) {
-      setState(() => _tagOperationInProgress = false);
-    }
-  }
-
-  Future<void> _removePersistedTag(String noteId, Tag tag) async {
-    if (_tagOperationInProgress) return;
-    final sessionKey = _sessionKey;
-    final generation = ++_tagOperationGeneration;
-    setState(() => _tagOperationInProgress = true);
-    final removed = await ref
-        .read(noteTagsVmProvider(noteId).notifier)
-        .removeTag(tag.id);
-    if (!_isCurrentTagOperation(sessionKey, generation)) return;
-    if (!removed) {
-      final message =
-          ref
-              .read(noteTagsVmProvider(noteId))
-              .value
-              ?.actionError
-              ?.userMessage ??
-          '移除标签失败，请重试';
-      setState(() => _tagSaveError = message);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    }
-    if (_isCurrentTagOperation(sessionKey, generation)) {
-      setState(() => _tagOperationInProgress = false);
-    }
-  }
-
-  Future<bool> _flushPendingTags() async {
-    final noteId = ref.read(noteEditorVmProvider).value?.note?.id;
-    if (noteId == null || _pendingTagNames.isEmpty || _tagOperationInProgress) {
-      return false;
-    }
-    final sessionKey = _sessionKey;
-    final generation = ++_tagOperationGeneration;
-    final provider = noteTagsVmProvider(noteId);
-    final subscription = ref.listenManual(provider, (_, _) {});
-    final names = Set<String>.from(_pendingTagNames);
-    setState(() => _tagOperationInProgress = true);
-    try {
-      final saved = await ref.read(provider.notifier).attachNames(names);
-      if (!_isCurrentTagOperation(sessionKey, generation)) return false;
-      if (saved) {
-        setState(() {
-          _pendingTagNames.clear();
-          _tagSaveError = null;
-        });
-        await ref.read(tagManagementVmProvider.notifier).refresh();
-        return true;
-      } else {
-        setState(() => _tagSaveError = '笔记已保存，但标签保存失败');
-        return false;
-      }
-    } finally {
-      subscription.close();
-      if (_isCurrentTagOperation(sessionKey, generation)) {
-        setState(() => _tagOperationInProgress = false);
-      }
-    }
+    ref.read(noteEditorVmProvider.notifier).addTagName(name);
+    setState(() {
+      _tagInputController.clear();
+      _tagInput = '';
+      _tagSaveError = null;
+    });
   }
 
   Widget _buildTagSection(NoteEditorState state) {
-    final noteId = state.note?.id;
-    final noteTags = noteId == null
-        ? null
-        : ref.watch(noteTagsVmProvider(noteId));
-    final tags = noteTags?.value?.tags ?? const <Tag>[];
+    final tagNames = state.tagNames;
     final catalogState = ref.watch(tagManagementVmProvider);
     final catalog = catalogState.value?.tags ?? const [];
-    final existingNames = {...tags.map((tag) => tag.name), ..._pendingTagNames};
+    final existingNames = tagNames.toSet();
     final query = _tagInput.trim();
     final suggestions = query.isEmpty
         ? const <Tag>[]
@@ -302,39 +183,16 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text('标签'),
-              if (noteTags?.isLoading == true)
-                const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              if (noteTags?.hasError == true)
-                Text(
-                  '标签加载失败',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              for (final tag in tags)
-                InputChip(
-                  label: Text(tag.name),
-                  deleteIcon: Tooltip(
-                    message: '移除标签 ${tag.name}',
-                    child: const Icon(Icons.cancel, size: 18),
-                  ),
-                  onDeleted: _tagOperationInProgress || noteId == null
-                      ? null
-                      : () => _removePersistedTag(noteId, tag),
-                  visualDensity: VisualDensity.compact,
-                ),
-              for (final name in _pendingTagNames)
+              for (final name in tagNames)
                 InputChip(
                   label: Text(name),
-                  avatar: const Icon(Icons.schedule, size: 16),
                   deleteIcon: Tooltip(
-                    message: '移除待保存标签 $name',
+                    message: '移除标签 $name',
                     child: const Icon(Icons.cancel, size: 18),
                   ),
-                  onDeleted: _tagOperationInProgress
-                      ? null
-                      : () => setState(() => _pendingTagNames.remove(name)),
+                  onDeleted: () => ref
+                      .read(noteEditorVmProvider.notifier)
+                      .removeTagName(name),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -346,7 +204,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                 child: TextField(
                   key: const ValueKey('editor-tag-input'),
                   controller: _tagInputController,
-                  enabled: !_tagOperationInProgress,
                   textInputAction: TextInputAction.done,
                   onChanged: (value) => setState(() {
                     _tagInput = value;
@@ -363,13 +220,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               ),
               IconButton(
                 tooltip: '添加标签',
-                onPressed: _tagOperationInProgress ? null : _submitTagName,
-                icon: _tagOperationInProgress
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add),
+                onPressed: _submitTagName,
+                icon: const Icon(Icons.add),
               ),
             ],
           ),
@@ -405,9 +257,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       child: ActionChip(
                         label: Text(tag.name),
                         avatar: const Icon(Icons.history, size: 16),
-                        onPressed: _tagOperationInProgress
-                            ? null
-                            : () => _submitTagName(tag),
+                        onPressed: () => _submitTagName(tag),
                       ),
                     ),
                 ],
@@ -423,10 +273,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   Future<void> _openHistory(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     var editorState = ref.read(noteEditorVmProvider).value;
-    if (editorState?.dirty == true || _pendingTagNames.isNotEmpty) {
+    if (editorState?.dirty == true) {
       final result = await _save();
-      if (result == NoteSaveResult.failed ||
-          result == NoteSaveResult.savedWithTagFailure) {
+      if (result == NoteSaveResult.failed) {
         if (context.mounted) {
           messenger.showSnackBar(
             const SnackBar(content: Text('保存失败，无法打开历史版本')),
@@ -459,9 +308,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   /// 返回：若有未保存改动弹确认
   Future<void> _back(BuildContext context) async {
-    final dirty =
-        (ref.read(noteEditorVmProvider).value?.dirty ?? false) ||
-        _pendingTagNames.isNotEmpty;
+    final dirty = ref.read(noteEditorVmProvider).value?.dirty ?? false;
     if (dirty) {
       final choice = await showDialog<_DiscardChoice>(
         context: context,
@@ -513,7 +360,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         _sessionInitialized &&
         state.value?.ready == true &&
         state.value?.saving != true &&
-        !_tagOperationInProgress &&
         _controller != null &&
         _titleCtrl != null;
     return PopScope(
@@ -673,7 +519,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _titleCtrl = null;
     _tagInputController.clear();
     _tagInput = '';
-    _pendingTagNames.clear();
     _tagSaveError = null;
   }
 }

@@ -1,12 +1,11 @@
 // 编辑器自由标签、自动补全、新笔记待保存和失败重试测试。
-import 'dart:async';
-
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/app_exception.dart';
@@ -20,7 +19,7 @@ import 'package:ruoke/src/features/notes/repository/tag_repository.dart';
 import 'package:ruoke/src/features/notes/view/note_editor_view.dart';
 
 void main() {
-  testWidgets('已有笔记可自由创建标签并移除原标签', (tester) async {
+  testWidgets('已有笔记标签增删在点击保存前只保留为草稿', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
     final notes = LocalNoteRepository(db);
@@ -35,10 +34,15 @@ void main() {
     await _addTag(tester, '新标签');
 
     var saved = _successValue(await tags.listTagsForNote(note.id));
-    expect(saved.map((tag) => tag.name).toSet(), {'旧标签', '新标签'});
+    expect(saved.map((tag) => tag.name), ['旧标签']);
     expect(find.text('新标签'), findsOneWidget);
 
     await tester.tap(find.byTooltip('移除标签 旧标签'));
+    await tester.pumpAndSettle();
+    saved = _successValue(await tags.listTagsForNote(note.id));
+    expect(saved.map((tag) => tag.name), ['旧标签']);
+
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
     saved = _successValue(await tags.listTagsForNote(note.id));
     expect(saved.map((tag) => tag.name), ['新标签']);
@@ -61,8 +65,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final allTags = _successValue(await tags.listTags());
-    final attached = _successValue(await tags.listTagsForNote(note.id));
     expect(allTags, hasLength(1));
+    expect(_successValue(await tags.listTagsForNote(note.id)), isEmpty);
+
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+    final attached = _successValue(await tags.listTagsForNote(note.id));
     expect(attached.single.id, existing.id);
   });
 
@@ -104,48 +112,58 @@ void main() {
     expect(find.text('空笔记不会保存'), findsOneWidget);
   });
 
-  testWidgets('正文保存成功但标签绑定失败时保留待保存标签', (tester) async {
+  testWidgets('标签增删后选择不保存离开不会更新数据库', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
     final notes = LocalNoteRepository(db);
-    final tags = _FailingAttachTagRepository();
-
-    await _pumpEditor(tester, db, noteId: 'new', tagRepository: tags);
-    await tester.enterText(find.byKey(const ValueKey('note-title')), '正文会保存');
-    await _addTag(tester, '稍后重试');
-    await tester.tap(find.byTooltip('保存'));
+    final tags = LocalTagRepository(db);
+    final note = _successValue(
+      await notes.create(subjectId: 'uncategorized', title: '退出测试'),
+    );
+    final old = _successValue(await tags.createTag(name: '原标签'));
+    await tags.replaceNoteTags(noteId: note.id, tagIds: [old.id]);
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const Scaffold(body: Text('编辑器外')),
+        ),
+        GoRoute(
+          path: '/editor',
+          builder: (_, _) => NoteEditorView(noteId: note.id),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: _localizedRouterApp(router),
+      ),
+    );
+    router.push('/editor');
     await tester.pumpAndSettle();
+    await _waitForEditor(tester);
 
-    expect(_successValue(await notes.listAll()), hasLength(1));
-    expect(find.text('稍后重试'), findsOneWidget);
-    expect(find.text('笔记已保存，但标签保存失败'), findsWidgets);
-    expect(find.text('已保存'), findsNothing);
+    await _addTag(tester, '新标签');
+    await tester.tap(find.byTooltip('移除标签 原标签'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     expect(find.text('未保存的改动'), findsOneWidget);
-  });
-
-  testWidgets('新笔记标签绑定未结束时禁用保存以防重复提交', (tester) async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db.close);
-    final gate = Completer<void>();
-    final tags = _DelayedAttachTagRepository(gate);
-
-    await _pumpEditor(tester, db, noteId: 'new', tagRepository: tags);
-    await tester.enterText(find.byKey(const ValueKey('note-title')), '防止重复绑定');
-    await _addTag(tester, '只绑定一次');
-    await tester.tap(find.byTooltip('保存'));
-    await _pumpUntil(() => tags.attachCallCount == 1, tester);
-
-    final saveButton = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.save_outlined),
-    );
-    expect(saveButton.onPressed, isNull);
-
-    gate.complete();
+    await tester.tap(find.text('不保存离开'));
     await tester.pumpAndSettle();
-    expect(tags.attachCallCount, 1);
+
+    final persisted = _successValue(await tags.listTagsForNote(note.id));
+    expect(persisted.map((tag) => tag.name), ['原标签']);
+
+    router.push('/editor');
+    await tester.pumpAndSettle();
+    await _waitForEditor(tester);
+    expect(find.text('原标签'), findsOneWidget);
+    expect(find.text('新标签'), findsNothing);
   });
 
   testWidgets('切换编辑会话会清除上一条新笔记的待保存标签', (tester) async {
@@ -206,26 +224,6 @@ void main() {
     expect(tags.listCallCount, 2);
   });
 
-  testWidgets('标签绑定失败后打开历史会重试并阻止跳转', (tester) async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db.close);
-    final tags = _FailingAttachTagRepository();
-
-    await _pumpEditor(tester, db, noteId: 'new', tagRepository: tags);
-    await tester.enterText(find.byKey(const ValueKey('note-title')), '保留待保存标签');
-    await _addTag(tester, '不能被历史清空');
-    await tester.tap(find.byTooltip('保存'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('历史版本'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('editor-tag-input')), findsOneWidget);
-    expect(find.text('不能被历史清空'), findsOneWidget);
-    expect(find.text('笔记已保存，但标签保存失败'), findsWidgets);
-  });
 }
 
 Future<void> _pumpEditor(
@@ -258,6 +256,17 @@ Widget _localizedApp(Widget home) => MaterialApp(
   home: home,
 );
 
+Widget _localizedRouterApp(GoRouter router) => MaterialApp.router(
+  routerConfig: router,
+  localizationsDelegates: const [
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    FlutterQuillLocalizations.delegate,
+  ],
+  supportedLocales: const [Locale('zh'), Locale('en', 'US')],
+);
+
 Future<void> _waitForEditor(WidgetTester tester) async {
   for (var frame = 0; frame < 30; frame++) {
     if (find.byKey(const ValueKey('editor-tag-input')).evaluate().isNotEmpty) {
@@ -273,14 +282,6 @@ Future<void> _addTag(WidgetTester tester, String name) async {
   await tester.enterText(find.byKey(const ValueKey('editor-tag-input')), name);
   await tester.tap(find.byTooltip('添加标签'));
   await tester.pumpAndSettle();
-}
-
-Future<void> _pumpUntil(bool Function() condition, WidgetTester tester) async {
-  for (var frame = 0; frame < 30; frame++) {
-    if (condition()) return;
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  expect(condition(), isTrue);
 }
 
 T _successValue<T>(Result<T> result) {
@@ -330,23 +331,6 @@ class _FailingAttachTagRepository implements TagRepository {
   @override
   Future<Result<void>> renameTag({required String id, required String name}) =>
       throw UnimplementedError();
-}
-
-class _DelayedAttachTagRepository extends _FailingAttachTagRepository {
-  final Completer<void> gate;
-  int attachCallCount = 0;
-
-  _DelayedAttachTagRepository(this.gate);
-
-  @override
-  Future<Result<List<Tag>>> attachTagsByNames({
-    required String noteId,
-    required Iterable<String> names,
-  }) async {
-    attachCallCount++;
-    await gate.future;
-    return const Success([]);
-  }
 }
 
 class _FailingCatalogTagRepository extends _FailingAttachTagRepository {

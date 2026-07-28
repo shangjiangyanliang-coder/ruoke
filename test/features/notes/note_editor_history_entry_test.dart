@@ -12,8 +12,11 @@ import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
+import 'package:ruoke/src/features/notes/models/tag.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
+import 'package:ruoke/src/features/notes/repository/tag_repository.dart';
 import 'package:ruoke/src/features/notes/view/note_editor_view.dart';
 
 void main() {
@@ -22,7 +25,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(_FakeTagRepository()),
+        ],
         child: const MaterialApp(
           localizationsDelegates: [
             GlobalMaterialLocalizations.delegate,
@@ -68,7 +74,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(_FakeTagRepository()),
+        ],
         child: MaterialApp.router(
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -117,7 +126,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(_FakeTagRepository()),
+        ],
         child: MaterialApp.router(
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -179,7 +191,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(_FakeTagRepository()),
+        ],
         child: MaterialApp.router(
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -206,6 +221,62 @@ void main() {
     final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
     expect(editor.controller.document.toPlainText(), '恢复后的正文\n');
   });
+
+  testWidgets('只修改标签时进入历史版本前会保存标签草稿', (tester) async {
+    final repository = _FakeNoteRepository()
+      ..note = _note(id: 'note-1', title: '标题');
+    final router = GoRouter(
+      initialLocation: '/notes/editor/note-1',
+      routes: [
+        GoRoute(
+          path: '/notes/editor/:noteId',
+          builder: (_, state) =>
+              NoteEditorView(noteId: state.pathParameters['noteId']!),
+        ),
+        GoRoute(
+          path: '/notes/editor/:noteId/versions',
+          builder: (_, _) => const Scaffold(body: Text('版本页')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          tagRepositoryProvider.overrideWithValue(
+            _FakeTagRepository(const ['旧标签']),
+          ),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            FlutterQuillLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh'), Locale('en', 'US')],
+          routerConfig: router,
+        ),
+      ),
+    );
+    await _pumpFrames(tester);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('editor-tag-input')),
+      '新标签',
+    );
+    await tester.tap(find.byTooltip('添加标签'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('历史版本'));
+    await _pumpFrames(tester);
+
+    expect(repository.updateCallCount, 1);
+    expect(repository.lastUpdatedTagNames, const ['旧标签', '新标签']);
+    expect(find.text('版本页'), findsOneWidget);
+  });
 }
 
 Future<void> _pumpFrames(WidgetTester tester) async {
@@ -227,6 +298,7 @@ class _FakeNoteRepository implements NoteRepository {
   int updateCallCount = 0;
   int getByIdCallCount = 0;
   String? lastUpdatedTitle;
+  List<String>? lastUpdatedTagNames;
   bool failUpdate = false;
 
   @override
@@ -262,6 +334,7 @@ class _FakeNoteRepository implements NoteRepository {
       return const Failure(DatabaseException('模拟保存失败'));
     }
     lastUpdatedTitle = title;
+    lastUpdatedTagNames = tagNames?.toList();
     note = _note(
       id: id,
       title: title ?? note?.title,
@@ -289,6 +362,67 @@ class _FakeNoteRepository implements NoteRepository {
 
   @override
   Future<Result<void>> softDelete(String id) async => const Success<void>(null);
+}
+
+class _FakeTagRepository implements TagRepository {
+  final List<String> names;
+
+  _FakeTagRepository([this.names = const []]);
+
+  @override
+  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success(
+    [
+      for (var index = 0; index < names.length; index++)
+        Tag(
+          id: 'tag-$index',
+          name: names[index],
+          color: null,
+          createdAt: 1,
+        ),
+    ],
+  );
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> createTag({required String name, String? color}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteTag(String id) => throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<TagWithCount>>> listTags() async => const Success([]);
+
+  @override
+  Future<Result<void>> renameTag({required String id, required String name}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<void>> replaceNoteTags({
+    required String noteId,
+    required List<String> tagIds,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) =>
+      throw UnimplementedError();
 }
 
 Note _note({String? id, String? title, String? contentJson}) => Note(
