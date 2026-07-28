@@ -1471,3 +1471,227 @@ git commits：`9b00c60 feat: 笔记分级-书章节树+一键定级`（16 文件
 - Widget 测试需在同一 ProviderScope 中使用真实 GoRouter pop/push，不能只用 `pumpWidget` 替换组件；
 - 真机测试由用户执行，自动化结果与用户真机结果必须分别记录；
 - 稳定性批次提交为 `3383961`，尚未 push。
+
+---
+
+## 技术路径记录：2026-07-28 22:20
+
+### 1. 完成事项
+
+完成阶段5第5批真机反馈改造：
+
+- 编辑器标签改为会话草稿，添加或删除后不保存离开不会写入数据库；
+- 标题、正文、重点和标签在同一 Drift 事务内原子保存；
+- 历史版本升级为标题、正文、标签完整快照，并兼容合法的旧正文 Delta；
+- 标签-only 修改会产生版本，恢复完整版本会恢复标题、正文和标签；
+- 搜索范围改为未搜索只显示根书、书展开章、章展开节的按需树；
+- 支持按书、章、节名称搜索，搜索结果补齐并合并祖先路径；
+- 保留全部笔记、全部书、全部章、全部节和指定节点子树语义；
+- 修复清空已有标题未保存、新建保存期间标签草稿丢失、损坏旧快照可覆盖当前正文等审查问题。
+
+### 2. 初始条件与输入
+
+- 分支：`feature/notes-mvp`；
+- 前置实现：第5批标签自由输入、多标签并集搜索、通用搜索和范围筛选已存在；
+- 用户真机反馈：
+  - 标签添加和删除在点击保存前就会写库；
+  - 标签变化不进入历史版本；
+  - 原范围弹窗平铺全部书、章、节，数据增长后难以使用；
+- 已确认交互：
+  - 标签和正文共享保存、放弃、继续编辑语义；
+  - 未输入范围关键词时只显示根书；
+  - 书和章逐级展开；
+  - 搜索命中章、节时显示完整祖先上下文；
+- 约束：不修改数据库 schema，不处理 F1.1.11、F1.1.12、F1.1.15，不 push，真机验证由用户执行。
+
+### 3. 技术方案选择
+
+#### 可选方案
+
+- 标签保存：
+  - 方案 A：编辑器标签即时写 `note_tag`，退出时再反向恢复；
+  - 方案 B：标签进入 `NoteEditorVm` 草稿，保存时与笔记正文一起提交。
+- 历史版本：
+  - 方案 A：新增数据库列或新表保存标签版本；
+  - 方案 B：保持 `snapshot_json TEXT`，通过带 `schemaVersion` 的 JSON 对象扩充快照。
+- 范围选择：
+  - 方案 A：继续全量加载后在界面本地过滤；
+  - 方案 B：根书和子节点按需读取，名称搜索由 DAO 和 Repository 返回祖先路径。
+
+#### 最终选择
+
+- 标签采用 ViewModel 草稿；
+- 历史版本采用 schemaVersion 1 的完整 JSON 快照；
+- 范围树采用按需读取、会话缓存和路径搜索；
+- 不引入第三方树组件，使用 Flutter Material 组件实现。
+
+#### 选择原因
+
+- 标签放入同一草稿可直接复用现有 dirty、保存失败保留和退出确认机制；
+- 单事务可避免笔记已保存但标签失败的半完成状态；
+- 复用现有文本列无需数据库迁移，同时可识别旧数组快照；
+- 按需树不会随着书目增长一次渲染全部节点；
+- Repository 补齐祖先后，两个搜索页面可共享同一范围选择器；
+- 独立会话 Provider 能在弹窗关闭时自动清理关键词、缓存和展开状态。
+
+### 4. 详细实施路径
+
+#### 步骤 1：建立完整历史快照格式
+
+- **目的：** 让历史版本覆盖标题、正文和标签；
+- **操作：** 新增 `NoteEditSnapshot`，写入 `schemaVersion/title/contentJson/tagNames`；
+- **方法或技术：** 标签 trim、去空、保持首次出现顺序去重；比较时忽略标签顺序；
+- **兼容规则：** 顶层对象解析为新快照；顶层数组只作为旧 Quill Delta；
+- **安全校验：** 旧数组必须能通过 Quill `Document.fromJson` 重建，空数组和损坏嵌入直接拒绝；
+- **输出：** 新格式编码、解码、完整状态比较和旧格式识别能力。
+
+#### 步骤 2：聚合 Repository 原子事务
+
+- **目的：** 避免标题、正文、重点和标签出现部分保存；
+- **操作：** 扩展 `NoteRepository.create/update` 的 `tagNames` 参数；
+- **方法或技术：** `LocalNoteRepository` 在单个 `_db.transaction` 内读取旧状态、比较完整状态、写旧快照、更新 note、重建 highlight、复用或创建 tag、替换 note_tag；
+- **关键设置：**
+  - `tagNames == null` 表示保持标签；
+  - 非 null 表示整体替换；
+  - 空白标题新建时规范化为 null；
+  - 更新时空字符串表示明确清空标题，null 表示未提供；
+- **输出：** 标签-only 版本、完整恢复和旧版正文-only 恢复。
+
+#### 步骤 3：编辑器标签草稿
+
+- **目的：** 退出不保存时不污染标签数据；
+- **操作：** `NoteEditorState` 增加 `tagNames`，初始化已有笔记时读取当前标签；
+- **方法或技术：** 添加和删除只更新 ViewModel 内存状态及 `_editRevision`；
+- **保存：** ViewModel 把当前标签名称交给 Repository 一次保存；
+- **竞态处理：** 新建保存期间继续修改标签时，保存返回只替换真实 note 身份，保留最新标签草稿并保持 dirty；
+- **输出：** 标签与标题、正文统一的保存和退出语义。
+
+#### 步骤 4：科目名称与路径搜索
+
+- **目的：** 不加载全量科目也能按名称找到指定范围；
+- **操作：** DAO 增加 `searchByName`，Repository 增加 `searchPaths`；
+- **方法或技术：** LIKE 查询按 `\`、`%`、`_` 顺序转义；每个命中节点最多向上读取两次父节点；
+- **校验：** 祖先缺失、层级不连续或任一祖先软删除时丢弃无效路径；
+- **输出：** 始终按书、章、节顺序排列的 `SubjectPath`。
+
+#### 步骤 5：可搜索按需范围树
+
+- **目的：** 替换平铺全部节点的臃肿弹窗；
+- **操作：** 新增 `SubjectScopePickerVm` 和 family autoDispose Provider；
+- **方法或技术：**
+  - build 只调用 `childrenOf(null)`；
+  - 展开节点时读取直接子节点并按 parentId 缓存；
+  - 关键词输入使用 250ms 防抖；
+  - 搜索 generation 阻止慢旧请求覆盖快新请求；
+  - 每次弹窗使用新 sessionKey，关闭后销毁状态；
+- **界面：** 层级范围放入紧凑菜单；根树和搜索树使用 ListTile、缩进及独立展开按钮；
+- **搜索合并：** 多条 `SubjectPath` 按节点 ID 合并共同祖先，避免重复书和章。
+
+#### 步骤 6：独立审查与修复
+
+- **目的：** 关闭自动化初版未覆盖的数据一致性和兼容风险；
+- **操作：** 对 `83ea70e..5bd2d3c` 做独立审查，并对修复提交进行两轮复核；
+- **发现与处理：**
+  - 清空标题被误当“保持原标题”：使用空字符串表达明确清空，Repository 规范化为 null；
+  - 新建保存期间标签草稿被旧状态覆盖：改为保留返回时最新状态标签；
+  - 任意数组被当作旧快照：使用 Quill 实际解析校验；
+  - 搜索结果祖先重复：合并为共享祖先树；
+- **输出：** 最终复核 Critical 0、Important 0。
+
+### 5. 核心技术细节
+
+- 完整快照：
+
+```json
+{
+  "schemaVersion": 1,
+  "title": "标题",
+  "contentJson": "[{\"insert\":\"正文\\n\"}]",
+  "tagNames": ["重点", "复习"]
+}
+```
+
+- 恢复新格式：恢复标题、正文、标签，恢复前先保存当前完整状态；
+- 恢复旧格式：仅恢复正文，保留当前标题和标签；
+- 损坏旧格式：恢复返回失败，事务不覆盖当前状态；
+- 范围语义：
+  - 指定书：书自身及全部章、节；
+  - 指定章：章自身及全部节；
+  - 指定节：仅该节；
+  - 全部书/章/节：只匹配直接归属于对应层级的笔记；
+- 范围选择错误隔离：根加载错误覆盖主体，搜索错误保留关键词，分支错误只影响对应节点。
+
+### 6. 文件与资源变更
+
+| 文件或资源 | 操作 | 具体内容 | 作用 |
+|---|---|---|---|
+| `jihua/ruoke-阶段5第5批真机反馈改造设计-20260728.md` | 新建 | 正式交互和架构设计 | 本批设计依据 |
+| `jihua/ruoke-阶段5第5批真机反馈改造实施计划-20260728.md` | 新建/更新 | TDD 步骤和执行结果 | 实施与验证依据 |
+| `lib/src/features/notes/models/note_edit_snapshot.dart` | 新建 | 完整快照及旧 Delta 校验 | 历史版本格式 |
+| `lib/src/features/notes/models/subject_path.dart` | 新建 | 根到命中节点路径 | 科目搜索结果模型 |
+| `lib/src/features/notes/repository/note_repository.dart` | 修改 | 保存接口增加标签名称 | 聚合保存契约 |
+| `lib/src/features/notes/repository/local_note_repository.dart` | 修改 | 原子保存、完整版本、兼容恢复 | 数据一致性核心 |
+| `lib/src/data/database/daos/note_dao.dart` | 修改 | 完整可编辑状态替换 | 恢复标题和正文 |
+| `lib/src/data/database/daos/subject_dao.dart` | 修改 | 名称字面量搜索 | 范围搜索数据入口 |
+| `lib/src/features/notes/repository/subject_repository.dart` | 修改 | 增加路径搜索接口 | ViewModel 抽象边界 |
+| `lib/src/features/notes/repository/local_subject_repository.dart` | 修改 | 补齐并校验祖先路径 | 搜索上下文 |
+| `lib/src/features/notes/view_model/note_editor_view_model.dart` | 修改 | 标签草稿、dirty 和保存竞态 | 编辑会话状态 |
+| `lib/src/features/notes/view/note_editor_view.dart` | 修改 | 标签区改为草稿操作 | 统一退出语义 |
+| `lib/src/features/notes/view_model/subject_scope_picker_view_model.dart` | 新建 | 根、分支缓存、防抖、generation | 范围弹窗状态 |
+| `lib/src/features/notes/view_model/view_model_providers.dart` | 修改 | 注册会话 family Provider | 生命周期隔离 |
+| `lib/src/features/notes/view/subject_scope_picker.dart` | 修改 | 可搜索按需树和祖先合并 | 范围选择 UI |
+| `lib/src/features/notes/view/note_search_view.dart` | 修改 | 接入独立范围弹窗 | 通用搜索 |
+| `lib/src/features/notes/view/tag_management_view.dart` | 修改 | 接入独立范围弹窗 | 标签搜索 |
+| `test/features/notes/` 相关测试 | 新建/修改 | 快照、Repository、编辑器、路径、范围树和页面回归 | TDD 与回归保护 |
+| `build/app/outputs/flutter-apk/app-debug.apk` | 更新 | 最新 Debug APK | 用户真机验证包 |
+
+### 7. 问题、尝试与解决过程
+
+#### 问题 1：系统 Flutter/Dart 锁导致命令超时
+
+- **表现：** 中途 `flutter analyze` 和系统 `dart format` 出现长时间无输出；
+- **原因判断：** Flutter SDK 缓存目录存在旧锁，Dart 还会尝试写受限的用户 APPDATA；
+- **尝试过的方法：** 不删除 SDK 锁文件，避免未经授权的破坏性操作；
+- **最终处理：** 测试继续使用可运行的 Flutter 命令；格式化和定向 analyze 使用 SDK 内 Dart，并把 APPDATA/LOCALAPPDATA 指向项目 `ceshi` 临时目录；
+- **处理结果：** 后续全量 Flutter analyze 恢复正常并通过。
+
+#### 问题 2：旧快照手写结构校验不完整
+
+- **表现：** 初版会接受空数组和部分无效嵌入；
+- **原因判断：** 手写 JSON 字段检查不能完整复制 Quill 文档约束；
+- **无效方法：** 仅检查 operation 是 Map 且 insert 为 String/Map；
+- **最终处理：** 使用 `Document.fromJson` 做真实可重建性校验；
+- **处理结果：** 空数组、缺失 insert、数字 insert、空嵌入均被拒绝，合法旧 Delta 继续恢复。
+
+#### 问题 3：搜索结果共同祖先重复
+
+- **表现：** 多个命中节分别显示相同祖先副标题，书和章不形成树；
+- **原因判断：** 界面逐条渲染 `SubjectPath`；
+- **最终处理：** 按节点 ID 把路径合并为共享树；
+- **处理结果：** 同一书和章只显示一次，多个命中节作为共同祖先下的子节点。
+
+### 8. 验证方法与结果
+
+- 每个生产改动均先运行失败测试确认 RED，再实现并运行 GREEN；
+- 最终 `flutter analyze --no-pub`：`No issues found!`；
+- 最终 `flutter test --no-pub`：138 项全部通过；
+- 最终 `flutter build apk --debug --no-pub`：成功；
+- APK：`build/app/outputs/flutter-apk/app-debug.apk`；
+- APK SHA-256：`E00096341CFA44F695A2DB1830DC1C6195A0016F6772908E3DF491BB8734B299`；
+- 独立代码审查：
+  - 初审：Critical 0、Important 3、Minor 1；
+  - 两轮修复复核后：Critical 0、Important 0；
+- 构建非阻断警告：`quill_native_bridge_android` 尚未迁移到 Flutter 未来要求的 Built-in Kotlin；
+- **未验证内容：** 本轮尚未安装最新 APK 到真机，用户尚未执行真机验收，不得写成真机通过。
+
+### 9. 可复现要点
+
+- 先执行快照和 Repository 测试，再验证编辑器 Widget，最后验证范围树和两个搜索页面；
+- 旧版历史数组必须是 Quill 可重建文档，不能仅凭“顶层是数组”判定合法；
+- 标签必须留在 `NoteEditorVm` 草稿，界面不得直接写 `note_tag`；
+- 新建保存完成时只替换真实 note 身份，不能覆盖保存期间产生的新标签草稿；
+- 科目 LIKE 查询必须转义反斜杠、百分号和下划线；
+- 范围弹窗每次打开使用新的 sessionKey，关闭后不得保留关键词、展开态或缓存；
+- 本轮备份位于 `beifen/stage5-batch5-device-feedback-20260728`，用户真机确认前不删除；
+- 最新 APK 尚未真机验证，真机结果必须与自动化结果分开记录；
+- 当前提交均为本地提交，未经用户确认不得 push。
