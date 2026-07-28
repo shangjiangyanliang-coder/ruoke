@@ -158,6 +158,21 @@ void main() {
     expect(exact.map((tag) => tag.name), ['复习']);
   });
 
+  test('标签部分匹配将百分号下划线和反斜杠按字面字符搜索', () async {
+    await repository.createTag(name: r'进度_50%\路径');
+    await repository.createTag(name: '进度A500路径');
+
+    for (final keyword in [r'_', r'%', r'\']) {
+      final tags = _successValue(
+        await repository.searchTags(
+          keyword: keyword,
+          matchMode: SearchMatchMode.contains,
+        ),
+      );
+      expect(tags.map((tag) => tag.name), [r'进度_50%\路径']);
+    }
+  });
+
   test('按名称添加会复用已有标签并避免重复关联', () async {
     final existing = _successValue(await repository.createTag(name: '重点'));
     final noteId = await _insertNote(db, 'reuse-note');
@@ -169,10 +184,7 @@ void main() {
       ),
     );
     final second = _successValue(
-      await repository.findOrCreateAndAttachTag(
-        noteId: noteId,
-        tagName: '重点',
-      ),
+      await repository.findOrCreateAndAttachTag(noteId: noteId, tagName: '重点'),
     );
 
     expect(first.id, existing.id);
@@ -192,10 +204,7 @@ void main() {
     );
 
     expect(tag.name, '新标签');
-    expect(
-      (await db.noteTagDao.listByNote(noteId)).single.tagId,
-      tag.id,
-    );
+    expect((await db.noteTagDao.listByNote(noteId)).single.tagId, tag.id);
   });
 
   test('批量按名称绑定会修剪名称并去重', () async {

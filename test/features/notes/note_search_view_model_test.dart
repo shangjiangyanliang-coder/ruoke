@@ -166,14 +166,9 @@ void main() {
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
     addTearDown(container.dispose);
-    final firstSubscription = container.listen(
-      noteSearchVmProvider,
-      (_, _) {},
-    );
+    final firstSubscription = container.listen(noteSearchVmProvider, (_, _) {});
     await container.read(noteSearchVmProvider.future);
-    await container
-        .read(noteSearchVmProvider.notifier)
-        .setKeyword('不应保留');
+    await container.read(noteSearchVmProvider.notifier).setKeyword('不应保留');
     firstSubscription.close();
     await container.pump();
 
@@ -189,6 +184,26 @@ void main() {
     expect(reopened.query.keywordMatchMode, SearchMatchMode.contains);
     expect(reopened.query.subjectScope, const SubjectScope.all());
     expect(reopened.query.sortOrder, NoteSortOrder.updatedDesc);
+  });
+  test('搜索请求挂起期间销毁 Provider 后完成请求不会回写旧状态', () async {
+    final repository = _FakeNoteRepository()
+      ..secondSearch = Completer<Result<List<Note>>>();
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    await container.read(noteSearchVmProvider.future);
+
+    final pending = container
+        .read(noteSearchVmProvider.notifier)
+        .setKeyword('即将销毁');
+    await Future<void>.delayed(Duration.zero);
+    subscription.close();
+    await container.pump();
+    repository.secondSearch!.complete(Success([_note('late', '迟到结果')]));
+
+    await expectLater(pending, completes);
   });
 }
 

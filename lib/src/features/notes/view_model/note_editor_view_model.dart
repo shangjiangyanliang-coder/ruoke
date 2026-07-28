@@ -13,7 +13,7 @@ import '../note_constants.dart';
 import '../providers.dart';
 
 /// 编辑器保存结果：区分成功、空新笔记跳过和真实失败。
-enum NoteSaveResult { saved, skippedEmpty, failed }
+enum NoteSaveResult { saved, savedWithTagFailure, skippedEmpty, failed }
 
 /// 编辑器状态：当前编辑的笔记 + 是否有未保存改动。
 class NoteEditorState {

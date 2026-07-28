@@ -41,13 +41,7 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/notes/search',
-      builder: (context, state) {
-        final rawTagIds = state.uri.queryParameters['tagIds'];
-        final tagIds = rawTagIds == null || rawTagIds.isEmpty
-            ? const <String>{}
-            : rawTagIds.split(',').where((id) => id.isNotEmpty).toSet();
-        return NoteSearchView(initialTagIds: tagIds);
-      },
+      builder: (context, state) => const NoteSearchView(),
     ),
     // 底部 5 标签导航 shell
     StatefulShellRoute.indexedStack(

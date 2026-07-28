@@ -125,21 +125,65 @@ void main() {
     expect(state.actionError, isA<DatabaseException>());
     expect(state.actionError?.userMessage, '模拟标签搜索失败');
   });
+  test('标签请求挂起期间销毁 Provider 后完成请求不会回写旧状态', () async {
+    final gate = Completer<Result<List<Tag>>>();
+    final tags = _FakeTagRepository()..firstSearch = gate;
+    final notes = _FakeNoteRepository();
+    final container = _container(tags, notes);
+    addTearDown(container.dispose);
+    final subscription = container.listen(tagSearchVmProvider, (_, _) {});
+    await container.read(tagSearchVmProvider.future);
+
+    final pending = container
+        .read(tagSearchVmProvider.notifier)
+        .setTagKeyword('即将销毁');
+    await Future<void>.delayed(Duration.zero);
+    subscription.close();
+    await container.pump();
+    gate.complete(Success([_tag('late', '迟到标签')]));
+
+    await expectLater(pending, completes);
+  });
+
+  test('笔记查询失败只重试笔记查询且不清除标签条件', () async {
+    final tags = _FakeTagRepository();
+    final notes = _FakeNoteRepository()..failSearch = true;
+    final container = _container(tags, notes);
+    addTearDown(container.dispose);
+    final subscription = container.listen(tagSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
+    await container.read(tagSearchVmProvider.future);
+    final notifier = container.read(tagSearchVmProvider.notifier);
+
+    await notifier.setTagKeyword('复习');
+    await notifier.setSelectedTagIds({'tag-review'});
+    final tagSearchCount = tags.searches.length;
+    expect(
+      container.read(tagSearchVmProvider).value!.noteSearchError,
+      isA<DatabaseException>(),
+    );
+
+    notes.failSearch = false;
+    await notifier.retryNoteSearch();
+
+    final state = container.read(tagSearchVmProvider).value!;
+    expect(state.noteSearchError, isNull);
+    expect(state.selectedTagIds, {'tag-review'});
+    expect(tags.searches, hasLength(tagSearchCount));
+    expect(state.results, hasLength(1));
+  });
 }
 
-ProviderContainer _container(
-  TagRepository tags,
-  NoteRepository notes,
-) => ProviderContainer(
-  overrides: [
-    tagRepositoryProvider.overrideWithValue(tags),
-    noteRepositoryProvider.overrideWithValue(notes),
-  ],
-);
+ProviderContainer _container(TagRepository tags, NoteRepository notes) =>
+    ProviderContainer(
+      overrides: [
+        tagRepositoryProvider.overrideWithValue(tags),
+        noteRepositoryProvider.overrideWithValue(notes),
+      ],
+    );
 
 class _FakeTagRepository implements TagRepository {
-  final searches =
-      <({String keyword, SearchMatchMode matchMode})>[];
+  final searches = <({String keyword, SearchMatchMode matchMode})>[];
   Completer<Result<List<Tag>>>? firstSearch;
   bool failSearch = false;
 
@@ -153,9 +197,7 @@ class _FakeTagRepository implements TagRepository {
       return firstSearch!.future;
     }
     if (failSearch) {
-      return Future.value(
-        const Failure(DatabaseException('模拟标签搜索失败')),
-      );
+      return Future.value(const Failure(DatabaseException('模拟标签搜索失败')));
     }
     final all = [_tag('tag-review', '复习'), _tag('tag-final', '期末复习')];
     return Future.value(
@@ -209,11 +251,17 @@ class _FakeTagRepository implements TagRepository {
 
 class _FakeNoteRepository implements NoteRepository {
   final queries = <NoteSearchQuery>[];
+  bool failSearch = false;
 
   @override
   Future<Result<List<Note>>> search(NoteSearchQuery query) async {
     queries.add(query);
-    return Success([_note('result-${queries.length}', '查询结果 ${queries.length}')]);
+    if (failSearch) {
+      return const Failure(DatabaseException('模拟笔记搜索失败'));
+    }
+    return Success([
+      _note('result-${queries.length}', '查询结果 ${queries.length}'),
+    ]);
   }
 
   @override

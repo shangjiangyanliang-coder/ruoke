@@ -177,24 +177,9 @@ void main() {
   });
 
   test('完全匹配会修剪标题和正文首尾空白且不匹配包含关系', () async {
-    await _insertNote(
-      db,
-      id: 'exact-title',
-      title: '代数',
-      updatedAt: 10,
-    );
-    await _insertNote(
-      db,
-      id: 'contains-title',
-      title: '线性代数',
-      updatedAt: 20,
-    );
-    await _insertNote(
-      db,
-      id: 'exact-body',
-      plainText: '  代数\n',
-      updatedAt: 30,
-    );
+    await _insertNote(db, id: 'exact-title', title: '代数', updatedAt: 10);
+    await _insertNote(db, id: 'contains-title', title: '线性代数', updatedAt: 20);
+    await _insertNote(db, id: 'exact-body', plainText: '  代数\n', updatedAt: 30);
 
     final exact = _successValue(
       await noteRepository.search(
@@ -221,29 +206,35 @@ void main() {
     ]);
   });
 
+  test('部分匹配将百分号下划线和反斜杠按字面字符搜索', () async {
+    await _insertNote(db, id: 'literal', title: r'进度_50%\路径', updatedAt: 20);
+    await _insertNote(db, id: 'ordinary', title: '进度A500路径', updatedAt: 10);
+
+    for (final keyword in [r'_', r'%', r'\']) {
+      final notes = _successValue(
+        await noteRepository.search(NoteSearchQuery(keyword: keyword)),
+      );
+      expect(notes.map((note) => note.id), ['literal']);
+    }
+  });
+
   test('指定书章节范围按节点自身和后代筛选笔记', () async {
     await _insertSubjectTree(db);
     await _insertScopeNotes(db);
 
     final book = _successValue(
       await noteRepository.search(
-        const NoteSearchQuery(
-          subjectScope: SubjectScope.subtree('book-a'),
-        ),
+        const NoteSearchQuery(subjectScope: SubjectScope.subtree('book-a')),
       ),
     );
     final chapter = _successValue(
       await noteRepository.search(
-        const NoteSearchQuery(
-          subjectScope: SubjectScope.subtree('chapter-a'),
-        ),
+        const NoteSearchQuery(subjectScope: SubjectScope.subtree('chapter-a')),
       ),
     );
     final section = _successValue(
       await noteRepository.search(
-        const NoteSearchQuery(
-          subjectScope: SubjectScope.subtree('section-a'),
-        ),
+        const NoteSearchQuery(subjectScope: SubjectScope.subtree('section-a')),
       ),
     );
 
@@ -347,20 +338,8 @@ Future<void> _insertNote(
 
 Future<void> _insertSubjectTree(AppDatabase db) async {
   for (final subject in [
-    (
-      id: 'book-a',
-      parentId: null,
-      name: '书 A',
-      level: 0,
-      sortOrder: 0,
-    ),
-    (
-      id: 'chapter-a',
-      parentId: 'book-a',
-      name: '章 A',
-      level: 1,
-      sortOrder: 0,
-    ),
+    (id: 'book-a', parentId: null, name: '书 A', level: 0, sortOrder: 0),
+    (id: 'chapter-a', parentId: 'book-a', name: '章 A', level: 1, sortOrder: 0),
     (
       id: 'section-a',
       parentId: 'chapter-a',
@@ -368,20 +347,8 @@ Future<void> _insertSubjectTree(AppDatabase db) async {
       level: 2,
       sortOrder: 0,
     ),
-    (
-      id: 'chapter-b',
-      parentId: 'book-a',
-      name: '章 B',
-      level: 1,
-      sortOrder: 1,
-    ),
-    (
-      id: 'book-b',
-      parentId: null,
-      name: '书 B',
-      level: 0,
-      sortOrder: 1,
-    ),
+    (id: 'chapter-b', parentId: 'book-a', name: '章 B', level: 1, sortOrder: 1),
+    (id: 'book-b', parentId: null, name: '书 B', level: 0, sortOrder: 1),
   ]) {
     await db.subjectDao.insertSubject(
       SubjectsCompanion(

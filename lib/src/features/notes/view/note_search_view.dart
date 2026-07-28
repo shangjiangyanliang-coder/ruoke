@@ -13,9 +13,7 @@ import 'subject_scope_picker.dart';
 
 /// 笔记搜索与筛选结果页。
 class NoteSearchView extends ConsumerStatefulWidget {
-  final Set<String> initialTagIds;
-
-  const NoteSearchView({super.key, this.initialTagIds = const {}});
+  const NoteSearchView({super.key});
 
   @override
   ConsumerState<NoteSearchView> createState() => _NoteSearchViewState();
@@ -33,14 +31,7 @@ class _NoteSearchViewState extends ConsumerState<NoteSearchView> {
   void initState() {
     super.initState();
     _keywordController = TextEditingController();
-    _selectedTagIds = Set.of(widget.initialTagIds);
-    if (widget.initialTagIds.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.read(noteSearchVmProvider.notifier).setTagIds(_selectedTagIds);
-        }
-      });
-    }
+    _selectedTagIds = {};
   }
 
   @override

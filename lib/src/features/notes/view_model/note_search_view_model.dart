@@ -62,8 +62,7 @@ class NoteSearchVm extends AsyncNotifier<NoteSearchState> {
   }) {
     return NoteSearchQuery(
       keyword: keyword ?? _currentQuery.keyword,
-      keywordMatchMode:
-          keywordMatchMode ?? _currentQuery.keywordMatchMode,
+      keywordMatchMode: keywordMatchMode ?? _currentQuery.keywordMatchMode,
       tagIds: tagIds ?? _currentQuery.tagIds,
       subjectScope: subjectScope ?? _currentQuery.subjectScope,
       sortOrder: sortOrder ?? _currentQuery.sortOrder,
@@ -86,10 +85,12 @@ class NoteSearchVm extends AsyncNotifier<NoteSearchState> {
     state = const AsyncLoading<NoteSearchState>();
     try {
       final next = await request;
+      if (!ref.mounted) return;
       if (revision == _requestRevision) {
         state = AsyncData(next);
       }
     } catch (error, stackTrace) {
+      if (!ref.mounted) return;
       if (revision == _requestRevision) {
         state = AsyncError(error, stackTrace);
       }

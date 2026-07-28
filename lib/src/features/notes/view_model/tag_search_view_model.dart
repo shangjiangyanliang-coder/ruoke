@@ -22,7 +22,10 @@ class TagSearchState {
   final List<Note> results;
   final bool searchingTags;
   final bool searchingNotes;
-  final AppException? actionError;
+  final AppException? tagSearchError;
+  final AppException? noteSearchError;
+
+  AppException? get actionError => tagSearchError ?? noteSearchError;
 
   const TagSearchState({
     this.tagKeyword = '',
@@ -34,7 +37,8 @@ class TagSearchState {
     this.results = const [],
     this.searchingTags = false,
     this.searchingNotes = false,
-    this.actionError,
+    this.tagSearchError,
+    this.noteSearchError,
   });
 
   TagSearchState copyWith({
@@ -47,8 +51,10 @@ class TagSearchState {
     List<Note>? results,
     bool? searchingTags,
     bool? searchingNotes,
-    AppException? actionError,
-    bool clearActionError = false,
+    AppException? tagSearchError,
+    AppException? noteSearchError,
+    bool clearTagSearchError = false,
+    bool clearNoteSearchError = false,
   }) => TagSearchState(
     tagKeyword: tagKeyword ?? this.tagKeyword,
     tagMatchMode: tagMatchMode ?? this.tagMatchMode,
@@ -59,7 +65,12 @@ class TagSearchState {
     results: results ?? this.results,
     searchingTags: searchingTags ?? this.searchingTags,
     searchingNotes: searchingNotes ?? this.searchingNotes,
-    actionError: clearActionError ? null : actionError ?? this.actionError,
+    tagSearchError: clearTagSearchError
+        ? null
+        : tagSearchError ?? this.tagSearchError,
+    noteSearchError: clearNoteSearchError
+        ? null
+        : noteSearchError ?? this.noteSearchError,
   );
 }
 
@@ -78,7 +89,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
         tagKeyword: keyword,
         matchedTags: keyword.trim().isEmpty ? const [] : null,
         searchingTags: keyword.trim().isNotEmpty,
-        clearActionError: true,
+        clearTagSearchError: true,
       ),
     );
     await _refreshMatchedTags();
@@ -89,7 +100,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
       _current.copyWith(
         tagMatchMode: matchMode,
         searchingTags: _current.tagKeyword.trim().isNotEmpty,
-        clearActionError: true,
+        clearTagSearchError: true,
       ),
     );
     await _refreshMatchedTags();
@@ -100,7 +111,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
       _current.copyWith(
         selectedTagIds: Set.unmodifiable(tagIds),
         results: tagIds.isEmpty ? const [] : null,
-        clearActionError: true,
+        clearNoteSearchError: true,
       ),
     );
     await _refreshNotes();
@@ -108,22 +119,21 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
 
   Future<void> setSubjectScope(SubjectScope subjectScope) async {
     state = AsyncData(
-      _current.copyWith(
-        subjectScope: subjectScope,
-        clearActionError: true,
-      ),
+      _current.copyWith(subjectScope: subjectScope, clearNoteSearchError: true),
     );
     await _refreshNotes();
   }
 
   Future<void> setSortOrder(NoteSortOrder sortOrder) async {
     state = AsyncData(
-      _current.copyWith(sortOrder: sortOrder, clearActionError: true),
+      _current.copyWith(sortOrder: sortOrder, clearNoteSearchError: true),
     );
     await _refreshNotes();
   }
 
   Future<void> refresh() => _refreshNotes();
+  Future<void> retryTagSearch() => _refreshMatchedTags();
+  Future<void> retryNoteSearch() => _refreshNotes();
 
   TagSearchState get _current => state.value ?? const TagSearchState();
 
@@ -136,7 +146,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
         current.copyWith(
           matchedTags: const [],
           searchingTags: false,
-          clearActionError: true,
+          clearTagSearchError: true,
         ),
       );
       return;
@@ -145,6 +155,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
     final result = await ref
         .read(tagRepositoryProvider)
         .searchTags(keyword: keyword, matchMode: current.tagMatchMode);
+    if (!ref.mounted) return;
     if (revision != _tagRequestRevision) return;
     final latest = _current;
     if (result is Success<List<Tag>>) {
@@ -152,14 +163,14 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
         latest.copyWith(
           matchedTags: result.value,
           searchingTags: false,
-          clearActionError: true,
+          clearTagSearchError: true,
         ),
       );
     } else {
       state = AsyncData(
         latest.copyWith(
           searchingTags: false,
-          actionError: (result as Failure<List<Tag>>).exception,
+          tagSearchError: (result as Failure<List<Tag>>).exception,
         ),
       );
     }
@@ -173,13 +184,13 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
         current.copyWith(
           results: const [],
           searchingNotes: false,
-          clearActionError: true,
+          clearNoteSearchError: true,
         ),
       );
       return;
     }
     state = AsyncData(
-      current.copyWith(searchingNotes: true, clearActionError: true),
+      current.copyWith(searchingNotes: true, clearNoteSearchError: true),
     );
     final result = await ref
         .read(noteRepositoryProvider)
@@ -190,6 +201,7 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
             sortOrder: current.sortOrder,
           ),
         );
+    if (!ref.mounted) return;
     if (revision != _noteRequestRevision) return;
     final latest = _current;
     if (result is Success<List<Note>>) {
@@ -197,14 +209,14 @@ class TagSearchVm extends AsyncNotifier<TagSearchState> {
         latest.copyWith(
           results: result.value,
           searchingNotes: false,
-          clearActionError: true,
+          clearNoteSearchError: true,
         ),
       );
     } else {
       state = AsyncData(
         latest.copyWith(
           searchingNotes: false,
-          actionError: (result as Failure<List<Note>>).exception,
+          noteSearchError: (result as Failure<List<Note>>).exception,
         ),
       );
     }

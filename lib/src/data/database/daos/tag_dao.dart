@@ -32,13 +32,21 @@ class TagDao extends DatabaseAccessor<AppDatabase> with _$TagDaoMixin {
     final query = select(tags)
       ..where(
         (tag) => switch (matchMode) {
-          TagDaoMatchMode.contains => tag.name.like('%$keyword%'),
+          TagDaoMatchMode.contains => tag.name.like(
+            '%${_escapeLikePattern(keyword)}%',
+            escapeChar: r'\',
+          ),
           TagDaoMatchMode.exact => tag.name.equals(keyword),
         },
       )
       ..orderBy([(tag) => OrderingTerm.asc(tag.name)]);
     return query.get();
   }
+
+  String _escapeLikePattern(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   /// 按名字取标签（查重/反查用）。
   Future<TagEntity?> getByName(String name) {

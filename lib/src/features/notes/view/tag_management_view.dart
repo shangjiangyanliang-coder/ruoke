@@ -105,9 +105,7 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() => _matchMode = value);
-                  ref
-                      .read(tagSearchVmProvider.notifier)
-                      .setTagMatchMode(value);
+                  ref.read(tagSearchVmProvider.notifier).setTagMatchMode(value);
                 },
               ),
               Tooltip(
@@ -166,11 +164,26 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
           )
         else
           const SizedBox(height: 8),
-        if (state.actionError != null)
+        if (state.tagSearchError != null)
           MaterialBanner(
-            content: Text(state.actionError!.userMessage),
+            content: Text(state.tagSearchError!.userMessage),
             actions: [
-              TextButton(onPressed: _searchNow, child: const Text('重试')),
+              TextButton(
+                onPressed: () =>
+                    ref.read(tagSearchVmProvider.notifier).retryTagSearch(),
+                child: const Text('重试标签'),
+              ),
+            ],
+          ),
+        if (state.noteSearchError != null)
+          MaterialBanner(
+            content: Text(state.noteSearchError!.userMessage),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    ref.read(tagSearchVmProvider.notifier).retryNoteSearch(),
+                child: const Text('重试笔记'),
+              ),
             ],
           ),
         const Divider(height: 1),
@@ -235,9 +248,7 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
       _subjectScope = selection.scope;
       _subjectScopeLabel = selection.label;
     });
-    await ref
-        .read(tagSearchVmProvider.notifier)
-        .setSubjectScope(_subjectScope);
+    await ref.read(tagSearchVmProvider.notifier).setSubjectScope(_subjectScope);
   }
 }
 

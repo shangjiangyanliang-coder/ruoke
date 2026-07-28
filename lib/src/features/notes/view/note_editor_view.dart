@@ -138,7 +138,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           hasVisibleContent: _hasVisibleContent(),
         );
     if (result == NoteSaveResult.saved && _pendingTagNames.isNotEmpty) {
-      await _flushPendingTags();
+      final tagsSaved = await _flushPendingTags();
+      if (!tagsSaved) return NoteSaveResult.savedWithTagFailure;
     }
     return result;
   }
@@ -229,10 +230,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
-  Future<void> _flushPendingTags() async {
+  Future<bool> _flushPendingTags() async {
     final noteId = ref.read(noteEditorVmProvider).value?.note?.id;
     if (noteId == null || _pendingTagNames.isEmpty || _tagOperationInProgress) {
-      return;
+      return false;
     }
     final sessionKey = _sessionKey;
     final generation = ++_tagOperationGeneration;
@@ -242,20 +243,17 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     setState(() => _tagOperationInProgress = true);
     try {
       final saved = await ref.read(provider.notifier).attachNames(names);
-      if (!_isCurrentTagOperation(sessionKey, generation)) return;
+      if (!_isCurrentTagOperation(sessionKey, generation)) return false;
       if (saved) {
         setState(() {
           _pendingTagNames.clear();
           _tagSaveError = null;
         });
         await ref.read(tagManagementVmProvider.notifier).refresh();
+        return true;
       } else {
         setState(() => _tagSaveError = '笔记已保存，但标签保存失败');
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('笔记已保存，但标签保存失败')));
-        }
+        return false;
       }
     } finally {
       subscription.close();
@@ -271,7 +269,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         ? null
         : ref.watch(noteTagsVmProvider(noteId));
     final tags = noteTags?.value?.tags ?? const <Tag>[];
-    final catalog = ref.watch(tagManagementVmProvider).value?.tags ?? const [];
+    final catalogState = ref.watch(tagManagementVmProvider);
+    final catalog = catalogState.value?.tags ?? const [];
     final existingNames = {...tags.map((tag) => tag.name), ..._pendingTagNames};
     final query = _tagInput.trim();
     final suggestions = query.isEmpty
@@ -374,6 +373,26 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               ),
             ],
           ),
+          if (query.isNotEmpty && catalogState.isLoading)
+            const LinearProgressIndicator(),
+          if (query.isNotEmpty && catalogState.hasError)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '标签建议加载失败',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      ref.read(tagManagementVmProvider.notifier).refresh(),
+                  child: const Text('重试建议'),
+                ),
+              ],
+            ),
           if (suggestions.isNotEmpty)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -406,7 +425,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     var editorState = ref.read(noteEditorVmProvider).value;
     if (editorState?.dirty == true) {
       final result = await _save();
-      if (result == NoteSaveResult.failed) {
+      if (result == NoteSaveResult.failed ||
+          result == NoteSaveResult.savedWithTagFailure) {
         if (context.mounted) {
           messenger.showSnackBar(
             const SnackBar(content: Text('保存失败，无法打开历史版本')),
@@ -439,7 +459,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   /// 返回：若有未保存改动弹确认
   Future<void> _back(BuildContext context) async {
-    final dirty = ref.read(noteEditorVmProvider).value?.dirty ?? false;
+    final dirty =
+        (ref.read(noteEditorVmProvider).value?.dirty ?? false) ||
+        _pendingTagNames.isNotEmpty;
     if (dirty) {
       final choice = await showDialog<_DiscardChoice>(
         context: context,
@@ -465,7 +487,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       switch (choice) {
         case _DiscardChoice.save:
           final result = await _save();
-          if (result != NoteSaveResult.failed && context.mounted) {
+          if ((result == NoteSaveResult.saved ||
+                  result == NoteSaveResult.skippedEmpty) &&
+              context.mounted) {
             context.pop();
           }
         case _DiscardChoice.discard:
@@ -514,6 +538,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       if (context.mounted) {
                         final message = switch (result) {
                           NoteSaveResult.saved => '已保存',
+                          NoteSaveResult.savedWithTagFailure => '笔记已保存，但标签保存失败',
                           NoteSaveResult.skippedEmpty => '空笔记不会保存',
                           NoteSaveResult.failed => '保存失败',
                         };

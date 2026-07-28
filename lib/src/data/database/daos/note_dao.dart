@@ -48,8 +48,14 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
     if (keyword != null) {
       final keywordPredicate = switch (matchMode) {
         NoteDaoMatchMode.contains =>
-          notes.title.like('%$keyword%') |
-              notes.plainText.like('%$keyword%'),
+          notes.title.like(
+                '%${_escapeLikePattern(keyword)}%',
+                escapeChar: r'\',
+              ) |
+              notes.plainText.like(
+                '%${_escapeLikePattern(keyword)}%',
+                escapeChar: r'\',
+              ),
         NoteDaoMatchMode.exact =>
           _trimWhitespace(notes.title).equals(keyword) |
               _trimWhitespace(notes.plainText).equals(keyword),
@@ -79,12 +85,17 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
     return query.get();
   }
 
-  /// Dart 的 trim 会处理空格、换行和制表符；SQLite TRIM 第二参数用同一字符集。
+  /// 完全匹配只统一修剪空格、换行、回车和制表符，避免 SQL 与查询词规则不对称。
   Expression<String> _trimWhitespace(Expression<String> expression) =>
       FunctionCallExpression<String>('TRIM', [
         expression,
         const Variable<String>(' \n\r\t'),
       ]);
+
+  String _escapeLikePattern(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   /// 按 subject 列出未软删笔记（不含已删）。
   Future<List<NoteEntity>> listBySubject(String subjectId) {

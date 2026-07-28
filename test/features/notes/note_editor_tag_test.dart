@@ -119,6 +119,11 @@ void main() {
     expect(_successValue(await notes.listAll()), hasLength(1));
     expect(find.text('稍后重试'), findsOneWidget);
     expect(find.text('笔记已保存，但标签保存失败'), findsWidgets);
+    expect(find.text('已保存'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    expect(find.text('未保存的改动'), findsOneWidget);
   });
 
   testWidgets('新笔记标签绑定未结束时禁用保存以防重复提交', (tester) async {
@@ -173,6 +178,32 @@ void main() {
     await tester.pumpAndSettle();
     await _waitForEditor(tester);
     expect(find.text('只属于第一会话'), findsNothing);
+  });
+
+  testWidgets('自动补全目录失败时保留输入并允许重试', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final tags = _FailingCatalogTagRepository();
+
+    await _pumpEditor(tester, db, noteId: 'new', tagRepository: tags);
+    await tester.enterText(
+      find.byKey(const ValueKey('editor-tag-input')),
+      '保留输入',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('标签建议加载失败'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '重试建议'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('editor-tag-input')))
+          .controller
+          ?.text,
+      '保留输入',
+    );
+    await tester.tap(find.widgetWithText(TextButton, '重试建议'));
+    await tester.pumpAndSettle();
+    expect(tags.listCallCount, 2);
   });
 }
 
@@ -294,5 +325,15 @@ class _DelayedAttachTagRepository extends _FailingAttachTagRepository {
     attachCallCount++;
     await gate.future;
     return const Success([]);
+  }
+}
+
+class _FailingCatalogTagRepository extends _FailingAttachTagRepository {
+  int listCallCount = 0;
+
+  @override
+  Future<Result<List<TagWithCount>>> listTags() async {
+    listCallCount++;
+    return const Failure(DatabaseException('模拟标签建议加载失败'));
   }
 }
