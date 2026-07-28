@@ -34,7 +34,7 @@ void main() {
     final repository = _StabilityRepository();
     await _pumpEditor(tester, repository);
 
-    await tester.enterText(find.byType(TextField), '只有标题');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '只有标题');
     await tester.tap(find.byTooltip('保存'));
     await _pumpFrames(tester);
 
@@ -93,7 +93,7 @@ void main() {
     await tester.tap(find.text('打开编辑器'));
     await _waitForEditor(tester);
 
-    await tester.enterText(find.byType(TextField), '   ');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '   ');
     await tester.tap(find.byIcon(Icons.arrow_back));
     await _pumpFrames(tester);
     await tester.tap(find.text('保存并离开'));
@@ -118,7 +118,10 @@ void main() {
     );
     await _waitForEditor(tester);
     expect(
-      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('note-title')))
+          .controller
+          ?.text,
       '上一条标题',
     );
 
@@ -131,7 +134,10 @@ void main() {
     await _pumpFrames(tester);
 
     expect(
-      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('note-title')))
+          .controller
+          ?.text,
       isEmpty,
     );
     final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
@@ -195,7 +201,7 @@ void main() {
     final repository = _StabilityRepository()
       ..delayedCreate = Completer<Result<Note>>();
     await _pumpEditor(tester, repository);
-    await tester.enterText(find.byType(TextField), '等待创建');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '等待创建');
 
     await tester.tap(find.byTooltip('保存'));
     await tester.pump();
@@ -238,7 +244,10 @@ void main() {
       await tester.tap(find.text('打开旧笔记'));
       await _waitForEditor(tester);
       expect(
-        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-title')))
+            .controller
+            ?.text,
         '旧笔记标题',
       );
 
@@ -248,7 +257,10 @@ void main() {
       await _waitForEditor(tester);
 
       expect(
-        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-title')))
+            .controller
+            ?.text,
         isEmpty,
       );
       final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
@@ -293,7 +305,10 @@ void main() {
     await _pumpFrames(tester);
 
     expect(
-      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('note-title')))
+          .controller
+          ?.text,
       isEmpty,
     );
     final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));

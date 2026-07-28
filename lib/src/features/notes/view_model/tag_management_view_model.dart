@@ -150,6 +150,41 @@ class NoteTagsVm extends AsyncNotifier<NoteTagsState> {
     }
   }
 
+  Future<bool> addByName(String name) async {
+    final previous = state.value ?? const NoteTagsState();
+    final result = await ref
+        .read(tagRepositoryProvider)
+        .findOrCreateAndAttachTag(noteId: noteId, tagName: name);
+    if (result is Failure<Tag>) {
+      state = AsyncData(
+        NoteTagsState(tags: previous.tags, actionError: result.exception),
+      );
+      return false;
+    }
+    return _reloadAfterWrite(previous);
+  }
+
+  Future<bool> attachNames(Iterable<String> names) async {
+    final previous = state.value ?? const NoteTagsState();
+    final result = await ref
+        .read(tagRepositoryProvider)
+        .attachTagsByNames(noteId: noteId, names: names);
+    if (result is Failure<List<Tag>>) {
+      state = AsyncData(
+        NoteTagsState(tags: previous.tags, actionError: result.exception),
+      );
+      return false;
+    }
+    return _reloadAfterWrite(previous);
+  }
+
+  Future<bool> removeTag(String tagId) {
+    final remaining = (state.value?.tags ?? const <Tag>[])
+        .where((tag) => tag.id != tagId)
+        .map((tag) => tag.id);
+    return replaceTagIds(remaining);
+  }
+
   Future<void> refresh() async {
     final previous = state.value ?? const NoteTagsState();
     try {
@@ -158,6 +193,18 @@ class NoteTagsVm extends AsyncNotifier<NoteTagsState> {
       state = AsyncData(
         NoteTagsState(tags: previous.tags, actionError: _asAppException(error)),
       );
+    }
+  }
+
+  Future<bool> _reloadAfterWrite(NoteTagsState previous) async {
+    try {
+      state = AsyncData(await _load());
+      return true;
+    } catch (error) {
+      state = AsyncData(
+        NoteTagsState(tags: previous.tags, actionError: _asAppException(error)),
+      );
+      return false;
     }
   }
 

@@ -37,7 +37,7 @@ void main() {
     );
     await _waitForEditor(tester);
 
-    await tester.enterText(find.byType(TextField), '首次保存');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '首次保存');
     await tester.tap(find.byTooltip('保存'));
     await _pumpFrames(tester);
     expect(find.byType(QuillEditor), findsOneWidget);
@@ -83,7 +83,7 @@ void main() {
     );
     await _pumpFrames(tester);
 
-    await tester.enterText(find.byType(TextField), '未保存标题');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '未保存标题');
     await tester.pump();
     await tester.tap(find.byTooltip('更多'));
     await _pumpFrames(tester);
@@ -132,7 +132,7 @@ void main() {
     );
     await _pumpFrames(tester);
 
-    await tester.enterText(find.byType(TextField), '无法保存的标题');
+    await tester.enterText(find.byKey(const ValueKey('note-title')), '无法保存的标题');
     await tester.pump();
     await tester.tap(find.byTooltip('更多'));
     await _pumpFrames(tester);
