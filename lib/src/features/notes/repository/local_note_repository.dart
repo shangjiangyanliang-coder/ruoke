@@ -8,13 +8,16 @@ import 'package:drift/drift.dart';
 import '../../../data/database/app_database.dart';
 import '../../../data/database/daos/note_dao.dart';
 import '../../../data/database/daos/note_highlight_dao.dart';
+import '../../../data/database/daos/note_tag_dao.dart';
 import '../../../data/database/daos/note_version_dao.dart';
+import '../../../data/database/daos/tag_dao.dart';
 import '../../../data/errors/app_exception.dart';
 import '../../../data/errors/result.dart';
 import '../../../utils/delta_plain_text.dart';
 import '../../../utils/id_generator.dart';
 import '../../../utils/time_utils.dart';
 import '../models/note.dart';
+import '../models/note_edit_snapshot.dart';
 import '../models/note_search_query.dart';
 import '../models/note_version.dart';
 import '../models/search_match_mode.dart';
@@ -31,6 +34,8 @@ class LocalNoteRepository implements NoteRepository {
   NoteDao get _noteDao => _db.noteDao;
   NoteHighlightDao get _highlightDao => _db.noteHighlightDao;
   NoteVersionDao get _versionDao => _db.noteVersionDao;
+  NoteTagDao get _noteTagDao => _db.noteTagDao;
+  TagDao get _tagDao => _db.tagDao;
 
   @override
   Future<Result<List<Note>>> listAll() => guard(
@@ -117,6 +122,7 @@ class LocalNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) => guard(
     () async {
       final now = nowMs();
@@ -137,6 +143,7 @@ class LocalNoteRepository implements NoteRepository {
           ),
         );
         await _replaceHighlights(id, contentJson, now);
+        await _replaceTagsByNames(id, tagNames, now);
         final created = await _noteDao.getById(id);
         if (created == null) {
           throw StateError('新建笔记后回读失败: $id');
@@ -155,35 +162,61 @@ class LocalNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) => guard(
     () async {
       final now = nowMs();
       await _db.transaction(() async {
-        // 取旧笔记：若正文相对上一版有变化则写一条 version 快照。
         final old = await _noteDao.getById(id);
         if (old == null) {
           throw StateError('笔记不存在: $id');
         }
-        if (contentJson != null && contentJson != old.contentJson) {
-          await _saveVersion(
-            noteId: id,
-            snapshotJson: old.contentJson ?? '',
-            createdAt: now,
-          );
-        }
-        final updatedRows = await _noteDao.updateNote(
+        final oldTagNames = await _listTagNames(id);
+        final nextTitle = title ?? old.title;
+        final nextContentJson = contentJson ?? old.contentJson;
+        final nextTagNames = tagNames == null
+            ? oldTagNames
+            : NoteEditSnapshot(
+                title: null,
+                contentJson: null,
+                tagNames: tagNames,
+              ).tagNames;
+        final oldSnapshot = NoteEditSnapshot(
+          title: old.title,
+          contentJson: old.contentJson,
+          tagNames: oldTagNames,
+        );
+        final nextSnapshot = NoteEditSnapshot(
+          title: nextTitle,
+          contentJson: nextContentJson,
+          tagNames: nextTagNames,
+        );
+        if (oldSnapshot.hasSameContent(nextSnapshot)) return;
+        await _saveVersion(
+          noteId: id,
+          snapshotJson: oldSnapshot.encode(),
+          createdAt: now,
+        );
+        final updatedRows = await _noteDao.replaceEditableState(
           id,
-          title: title,
-          contentJson: contentJson,
-          plainText: plainText ?? deltaJsonToPlainText(contentJson),
-          isDraft: isDraft,
+          title: nextTitle,
+          contentJson: nextContentJson,
+          plainText:
+              plainText ??
+              (contentJson == null
+                  ? old.plainText
+                  : deltaJsonToPlainText(nextContentJson)),
+          isDraft: isDraft ?? old.isDraft,
           updatedAt: now,
         );
         if (updatedRows != 1) {
           throw StateError('更新笔记行数异常: $id/$updatedRows');
         }
         if (contentJson != null) {
-          await _replaceHighlights(id, contentJson, now);
+          await _replaceHighlights(id, nextContentJson, now);
+        }
+        if (tagNames != null) {
+          await _replaceTagsByNames(id, nextTagNames, now);
         }
       });
     },
@@ -214,23 +247,40 @@ class LocalNoteRepository implements NoteRepository {
         if (target == null) {
           throw StateError('历史版本不存在: $noteId/$versionNo');
         }
-        if (current.contentJson != target.snapshotJson) {
+        final currentTagNames = await _listTagNames(noteId);
+        final currentSnapshot = NoteEditSnapshot(
+          title: current.title,
+          contentJson: current.contentJson,
+          tagNames: currentTagNames,
+        );
+        final decodedTarget = NoteEditSnapshot.decode(target.snapshotJson);
+        final restoredSnapshot = decodedTarget.isLegacy
+            ? NoteEditSnapshot(
+                title: current.title,
+                contentJson: decodedTarget.contentJson,
+                tagNames: currentTagNames,
+              )
+            : decodedTarget;
+        if (!currentSnapshot.hasSameContent(restoredSnapshot)) {
           await _saveVersion(
             noteId: noteId,
-            snapshotJson: current.contentJson ?? '',
+            snapshotJson: currentSnapshot.encode(),
             createdAt: now,
           );
         }
-        final updatedRows = await _noteDao.updateNote(
+        final updatedRows = await _noteDao.replaceEditableState(
           noteId,
-          contentJson: target.snapshotJson,
-          plainText: deltaJsonToPlainText(target.snapshotJson),
+          title: restoredSnapshot.title,
+          contentJson: restoredSnapshot.contentJson,
+          plainText: deltaJsonToPlainText(restoredSnapshot.contentJson),
+          isDraft: current.isDraft,
           updatedAt: now,
         );
         if (updatedRows != 1) {
           throw StateError('恢复笔记行数异常: $noteId/$updatedRows');
         }
-        await _replaceHighlights(noteId, target.snapshotJson, now);
+        await _replaceHighlights(noteId, restoredSnapshot.contentJson, now);
+        await _replaceTagsByNames(noteId, restoredSnapshot.tagNames, now);
       });
     },
     orElse: (e) => const Failure(
@@ -281,6 +331,42 @@ class LocalNoteRepository implements NoteRepository {
           body: Value(draft.body),
           createdAt: Value(createdAt),
         ),
+      );
+    }
+  }
+
+  Future<List<String>> _listTagNames(String noteId) async {
+    final links = await _noteTagDao.listByNote(noteId);
+    final tags = await _tagDao.listByIds(
+      links.map((link) => link.tagId).toList(),
+    );
+    return tags.map((tag) => tag.name).toList();
+  }
+
+  Future<void> _replaceTagsByNames(
+    String noteId,
+    Iterable<String> names,
+    int createdAt,
+  ) async {
+    final normalizedNames = NoteEditSnapshot(
+      title: null,
+      contentJson: null,
+      tagNames: names,
+    ).tagNames;
+    await _noteTagDao.deleteByNote(noteId);
+    for (final name in normalizedNames) {
+      var tag = await _tagDao.getByName(name);
+      tag ??= TagEntity(
+        id: newId(),
+        name: name,
+        color: null,
+        createdAt: createdAt,
+      );
+      if (await _tagDao.getByName(name) == null) {
+        await _tagDao.insertTag(tag);
+      }
+      await _noteTagDao.insertNoteTag(
+        NoteTagEntity(noteId: noteId, tagId: tag.id, createdAt: createdAt),
       );
     }
   }

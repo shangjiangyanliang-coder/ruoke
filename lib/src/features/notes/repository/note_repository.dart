@@ -26,15 +26,18 @@ abstract class NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   });
 
-  /// 更新笔记（标题/正文/派生纯字）。若正文相对上一版有变化，触发 note_version 写快照。
+  /// 原子更新笔记和可选标签；完整编辑状态变化时写 note_version 快照。
+  /// tagNames 为 null 时保持标签关联不变，非 null 时整体替换。
   Future<Result<void>> update({
     required String id,
     String? title,
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   });
 
   /// 软删笔记。

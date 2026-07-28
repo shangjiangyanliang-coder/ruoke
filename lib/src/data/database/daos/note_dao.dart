@@ -132,6 +132,26 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
     );
   }
 
+  /// 完整替换编辑字段，供历史版本恢复时明确写入 null 标题或正文。
+  Future<int> replaceEditableState(
+    String id, {
+    required String? title,
+    required String? contentJson,
+    required String plainText,
+    required bool isDraft,
+    required int updatedAt,
+  }) {
+    return (update(notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(
+        title: Value(title),
+        contentJson: Value(contentJson),
+        plainText: Value(plainText),
+        isDraft: Value(isDraft),
+        updatedAt: Value(updatedAt),
+      ),
+    );
+  }
+
   /// 软删：置 isDeleted=true + deletedAt=nowMs，不真删。
   Future<int> softDelete(String id, int deletedAtMs) {
     return (update(notes)..where((n) => n.id.equals(id))).write(

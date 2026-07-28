@@ -243,6 +243,7 @@ class _FakeNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) => throw UnimplementedError();
 
   @override
@@ -252,6 +253,7 @@ class _FakeNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) => throw UnimplementedError();
 
   @override

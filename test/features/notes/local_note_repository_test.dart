@@ -2,20 +2,25 @@
 // 作用: 验证重点记录、历史快照和版本回退的 Repository 闭环。
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/result.dart';
+import 'package:ruoke/src/features/notes/models/note_edit_snapshot.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
+import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
 
 void main() {
   late AppDatabase db;
   late LocalNoteRepository repository;
+  late LocalTagRepository tagRepository;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     repository = LocalNoteRepository(db);
+    tagRepository = LocalTagRepository(db);
   });
 
   tearDown(() => db.close());
@@ -61,7 +66,8 @@ void main() {
       'underline:新下划线',
     ]);
     expect(versions, hasLength(1));
-    expect(versions.single.snapshotJson, oldContent);
+    final snapshot = NoteEditSnapshot.decode(versions.single.snapshotJson);
+    expect(snapshot.contentJson, oldContent);
   });
 
   test('恢复指定版本会保留回退前正文并写回目标快照', () async {
@@ -86,7 +92,10 @@ void main() {
 
     expect(note?.contentJson, firstContent);
     expect(versions, hasLength(2));
-    expect(versions.first.snapshotJson, secondContent);
+    expect(
+      NoteEditSnapshot.decode(versions.first.snapshotJson).contentJson,
+      secondContent,
+    );
     expect(highlights.map((item) => '${item.kind}:${item.body}'), ['red:第一版']);
   });
 
@@ -123,20 +132,152 @@ void main() {
     expect(await db.noteHighlightDao.listByNote('missing-note'), isEmpty);
   });
 
-  test('正文没有变化时不会新增历史版本', () async {
+  test('标题变化也会新增完整历史版本', () async {
     final content = _delta([_op('正文')]);
     final noteId = _successValue(
-      await repository.create(subjectId: 'uncategorized', contentJson: content),
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '旧标题',
+        contentJson: content,
+      ),
     ).id;
 
     final result = await repository.update(
       id: noteId,
-      title: '只改标题',
+      title: '新标题',
       contentJson: content,
     );
 
     expect(result, isA<Success<void>>());
+    final versions = _successValue(await repository.listVersions(noteId));
+    expect(versions, hasLength(1));
+    expect(
+      NoteEditSnapshot.decode(versions.single.snapshotJson).title,
+      '旧标题',
+    );
+  });
+
+  test('完整状态没有变化时不会新增历史版本', () async {
+    final content = _delta([_op('正文')]);
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '标题',
+        contentJson: content,
+        tagNames: const ['重点'],
+      ),
+    ).id;
+
+    final result = await repository.update(
+      id: noteId,
+      title: '标题',
+      contentJson: content,
+      tagNames: const ['重点'],
+    );
+
+    expect(result, isA<Success<void>>());
     expect(_successValue(await repository.listVersions(noteId)), isEmpty);
+  });
+
+  test('只修改标签会保存旧的标题正文和标签版本', () async {
+    final content = _delta([_op('正文')]);
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '标题',
+        contentJson: content,
+        tagNames: const ['旧标签'],
+      ),
+    ).id;
+
+    final result = await repository.update(
+      id: noteId,
+      title: '标题',
+      contentJson: content,
+      tagNames: const ['新标签'],
+    );
+
+    expect(result, isA<Success<void>>());
+    final tags = _successValue(await tagRepository.listTagsForNote(noteId));
+    expect(tags.map((tag) => tag.name), ['新标签']);
+    final versions = _successValue(await repository.listVersions(noteId));
+    expect(versions, hasLength(1));
+    final snapshot = NoteEditSnapshot.decode(versions.single.snapshotJson);
+    expect(snapshot.title, '标题');
+    expect(snapshot.contentJson, content);
+    expect(snapshot.tagNames, ['旧标签']);
+  });
+
+  test('恢复完整版本会恢复标题正文标签并保存恢复前状态', () async {
+    final firstContent = _delta([_op('第一版\n', color: 'red')]);
+    final secondContent = _delta([_op('第二版\n', underline: true)]);
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '标题 A',
+        contentJson: firstContent,
+        tagNames: const ['标签 A'],
+      ),
+    ).id;
+    await repository.update(
+      id: noteId,
+      title: '标题 B',
+      contentJson: secondContent,
+      tagNames: const ['标签 B'],
+    );
+
+    final result = await repository.restoreVersion(
+      noteId: noteId,
+      versionNo: 1,
+    );
+
+    expect(result, isA<Success<void>>());
+    final note = _successValue(await repository.getById(noteId));
+    final tags = _successValue(await tagRepository.listTagsForNote(noteId));
+    expect(note?.title, '标题 A');
+    expect(note?.contentJson, firstContent);
+    expect(note?.plainText, '第一版\n');
+    expect(tags.map((tag) => tag.name), ['标签 A']);
+    final versions = _successValue(await repository.listVersions(noteId));
+    expect(versions, hasLength(2));
+    final beforeRestore = NoteEditSnapshot.decode(versions.first.snapshotJson);
+    expect(beforeRestore.title, '标题 B');
+    expect(beforeRestore.contentJson, secondContent);
+    expect(beforeRestore.tagNames, ['标签 B']);
+  });
+
+  test('恢复旧正文快照会保留当前标题和标签', () async {
+    final currentContent = _delta([_op('当前正文')]);
+    final legacyContent = _delta([_op('旧正文')]);
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '当前标题',
+        contentJson: currentContent,
+        tagNames: const ['当前标签'],
+      ),
+    ).id;
+    await db.noteVersionDao.insertVersion(
+      NoteVersionsCompanion(
+        id: const Value('legacy-version'),
+        noteId: Value(noteId),
+        versionNo: const Value(1),
+        snapshotJson: Value(legacyContent),
+        createdAt: const Value(1),
+      ),
+    );
+
+    final result = await repository.restoreVersion(
+      noteId: noteId,
+      versionNo: 1,
+    );
+
+    expect(result, isA<Success<void>>());
+    final note = _successValue(await repository.getById(noteId));
+    final tags = _successValue(await tagRepository.listTagsForNote(noteId));
+    expect(note?.title, '当前标题');
+    expect(note?.contentJson, legacyContent);
+    expect(tags.map((tag) => tag.name), ['当前标签']);
   });
 
   test('恢复不存在的历史版本会失败且当前正文保持不变', () async {

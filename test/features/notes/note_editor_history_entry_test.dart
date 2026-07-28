@@ -236,6 +236,7 @@ class _FakeNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) async {
     note = _note(id: 'note-1', title: title, contentJson: contentJson);
     return Success(note!);
@@ -254,6 +255,7 @@ class _FakeNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) async {
     updateCallCount++;
     if (failUpdate) {

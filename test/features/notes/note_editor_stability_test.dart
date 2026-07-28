@@ -429,6 +429,7 @@ class _StabilityRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) async {
     createCallCount++;
     if (delayedCreate case final pending?) {
@@ -461,6 +462,7 @@ class _StabilityRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) async {
     updateCallCount++;
     return const Success<void>(null);

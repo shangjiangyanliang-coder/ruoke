@@ -281,6 +281,7 @@ class _CreateReturnsNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) async {
     createCallCount++;
     return Success(
@@ -298,6 +299,7 @@ class _CreateReturnsNoteRepository implements NoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) async {
     updateCallCount++;
     return const Success<void>(null);
@@ -345,6 +347,7 @@ class _DelayedCreateRepository extends _CreateReturnsNoteRepository {
     String? contentJson,
     String? plainText,
     bool isDraft = false,
+    Iterable<String> tagNames = const [],
   }) {
     createCallCount++;
     return _create.future;
@@ -369,6 +372,7 @@ class _DelayedUpdateRepository extends _CreateReturnsNoteRepository {
     String? contentJson,
     String? plainText,
     bool? isDraft,
+    Iterable<String>? tagNames,
   }) {
     updateCallCount++;
     return _update.future;
