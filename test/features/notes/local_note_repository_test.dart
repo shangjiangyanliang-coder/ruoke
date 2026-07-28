@@ -44,6 +44,16 @@ void main() {
     ]);
   });
 
+  test('新建笔记会把空白标题规范化为 null', () async {
+    final result = await repository.create(
+      subjectId: 'uncategorized',
+      title: '   ',
+      contentJson: _delta([_op('正文')]),
+    );
+
+    expect(_successValue(result).title, isNull);
+  });
+
   test('更新正文会重建重点并保存旧正文版本', () async {
     final oldContent = _delta([_op('旧红字', color: 'red')]);
     final newContent = _delta([_op('新下划线', underline: true)]);
@@ -263,7 +273,7 @@ void main() {
 
   test('恢复旧正文快照会保留当前标题和标签', () async {
     final currentContent = _delta([_op('当前正文')]);
-    final legacyContent = _delta([_op('旧正文')]);
+    final legacyContent = _delta([_op('旧正文\n')]);
     final noteId = _successValue(
       await repository.create(
         subjectId: 'uncategorized',

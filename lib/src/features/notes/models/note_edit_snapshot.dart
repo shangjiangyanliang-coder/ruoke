@@ -2,6 +2,8 @@
 // 作用: 编解码标题、正文和标签的完整历史快照，并兼容旧正文 Delta。
 import 'dart:convert';
 
+import 'package:flutter_quill/flutter_quill.dart' show Document;
+
 /// 可写入 note_version.snapshot_json 的完整编辑状态。
 class NoteEditSnapshot {
   static const int currentSchemaVersion = 1;
@@ -72,16 +74,13 @@ class NoteEditSnapshot {
 
   /// 历史正文是可重建文档的插入 Delta，不接受 retain/delete 或缺失 insert。
   static bool _isLegacyDocumentDelta(List<dynamic> operations) {
-    for (final operation in operations) {
-      if (operation is! Map<String, dynamic>) return false;
-      final insert = operation['insert'];
-      if (insert is! String && insert is! Map<String, dynamic>) return false;
-      final attributes = operation['attributes'];
-      if (attributes != null && attributes is! Map<String, dynamic>) {
-        return false;
-      }
+    if (operations.isEmpty) return false;
+    try {
+      Document.fromJson(operations);
+      return true;
+    } catch (_) {
+      return false;
     }
-    return true;
   }
 
   /// 标签关联没有顺序语义，因此比较完整状态时忽略标签排列顺序。

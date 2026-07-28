@@ -127,6 +127,10 @@ class LocalNoteRepository implements NoteRepository {
     () async {
       final now = nowMs();
       final id = newId();
+      final normalizedTitle = title?.trim();
+      final storedTitle = normalizedTitle == null || normalizedTitle.isEmpty
+          ? null
+          : normalizedTitle;
       // plain_text 由 contentJson 派生（UI 不用关心）；外部显式传 plainText 时优先用
       final derivedPlain = plainText ?? deltaJsonToPlainText(contentJson);
       return _db.transaction(() async {
@@ -134,7 +138,7 @@ class LocalNoteRepository implements NoteRepository {
           NotesCompanion(
             id: Value(id),
             subjectId: Value(subjectId),
-            title: Value(title),
+            title: Value(storedTitle),
             contentJson: Value(contentJson),
             plainText: Value(derivedPlain),
             isDraft: Value(isDraft),

@@ -40,6 +40,11 @@ void main() {
     expect(() => NoteEditSnapshot.decode('"正文"'), throwsFormatException);
     expect(() => NoteEditSnapshot.decode('[1]'), throwsFormatException);
     expect(() => NoteEditSnapshot.decode('[{}]'), throwsFormatException);
+    expect(() => NoteEditSnapshot.decode('[]'), throwsFormatException);
+    expect(
+      () => NoteEditSnapshot.decode('[{"insert":{}}]'),
+      throwsFormatException,
+    );
     expect(
       () => NoteEditSnapshot.decode('[{"insert":1}]'),
       throwsFormatException,
