@@ -1,4 +1,5 @@
 // 笔记搜索页关键词、标签、排序、空态和结果导航测试。
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
 import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
@@ -113,41 +115,191 @@ void main() {
     expect(find.text('没有匹配的笔记'), findsOneWidget);
   });
 
-  testWidgets('页面重开时控件恢复已有关键词、标签和排序', (tester) async {
+  testWidgets('标题正文支持部分匹配和完全匹配切换', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    final tag = _successValue(
-      await LocalTagRepository(db).createTag(name: '重点'),
+    final notes = LocalNoteRepository(db);
+    await notes.create(
+      subjectId: 'uncategorized',
+      title: '代数',
+      plainText: '基础',
     );
-    final container = ProviderContainer(
-      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    await notes.create(
+      subjectId: 'uncategorized',
+      title: '线性代数',
+      plainText: '矩阵',
     );
-    addTearDown(container.dispose);
-    await container.read(noteSearchVmProvider.future);
-    final notifier = container.read(noteSearchVmProvider.notifier);
-    await notifier.setKeyword('矩阵');
-    await notifier.setTagIds({tag.id});
-    await notifier.setSortOrder(NoteSortOrder.titleAsc);
 
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
         child: const MaterialApp(home: NoteSearchView()),
       ),
     );
     await tester.pumpAndSettle();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    final dropdown = tester.widget<DropdownButton<NoteSortOrder>>(
+    await tester.enterText(
+      find.byKey(const ValueKey('note-search-keyword')),
+      '代数',
+    );
+    await tester.tap(find.byTooltip('执行搜索'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, '代数'), findsOneWidget);
+    expect(find.text('线性代数'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButton<SearchMatchMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完全匹配').last);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, '代数'), findsOneWidget);
+    expect(find.text('线性代数'), findsNothing);
+  });
+
+  testWidgets('搜索范围支持指定书子树和全部章直接归属', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    await _insertSubject(
+      db,
+      id: 'book-a',
+      name: '书 A',
+      level: 0,
+    );
+    await _insertSubject(
+      db,
+      id: 'chapter-a',
+      parentId: 'book-a',
+      name: '章 A',
+      level: 1,
+    );
+    await _insertSubject(
+      db,
+      id: 'section-a',
+      parentId: 'chapter-a',
+      name: '节 A',
+      level: 2,
+    );
+    await _insertSubject(
+      db,
+      id: 'book-b',
+      name: '书 B',
+      level: 0,
+    );
+    final notes = LocalNoteRepository(db);
+    await notes.create(subjectId: 'book-a', title: '书 A 笔记');
+    await notes.create(subjectId: 'chapter-a', title: '章 A 笔记');
+    await notes.create(subjectId: 'section-a', title: '节 A 笔记');
+    await notes.create(subjectId: 'book-b', title: '书 B 笔记');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: const MaterialApp(home: NoteSearchView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('选择搜索范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('书 A').last);
+    await tester.pumpAndSettle();
+    expect(find.text('书 A 笔记'), findsOneWidget);
+    expect(find.text('章 A 笔记'), findsOneWidget);
+    expect(find.text('节 A 笔记'), findsOneWidget);
+    expect(find.text('书 B 笔记'), findsNothing);
+
+    await tester.tap(find.byTooltip('选择搜索范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全部章').last);
+    await tester.pumpAndSettle();
+    expect(find.text('章 A 笔记'), findsOneWidget);
+    expect(find.text('书 A 笔记'), findsNothing);
+    expect(find.text('节 A 笔记'), findsNothing);
+  });
+
+  testWidgets('退出搜索页后重新进入会清空全部页面条件', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, _) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () => context.push('/search'),
+                child: const Text('打开搜索'),
+              ),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/search',
+          builder: (_, _) => const NoteSearchView(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('打开搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('note-search-keyword')),
+      '上一次搜索',
+    );
+    await tester.tap(find.byTooltip('执行搜索'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<SearchMatchMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完全匹配').last);
+    await tester.pumpAndSettle();
+    router.pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('打开搜索'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('note-search-keyword')),
+    );
+    final matchMode = tester.widget<DropdownButton<SearchMatchMode>>(
+      find.byType(DropdownButton<SearchMatchMode>),
+    );
+    final sortOrder = tester.widget<DropdownButton<NoteSortOrder>>(
       find.byType(DropdownButton<NoteSortOrder>),
     );
-    final chip = tester.widget<FilterChip>(
-      find.widgetWithText(FilterChip, '重点'),
-    );
-    expect(field.controller?.text, '矩阵');
-    expect(dropdown.value, NoteSortOrder.titleAsc);
-    expect(chip.selected, isTrue);
+    expect(field.controller?.text, isEmpty);
+    expect(matchMode.value, SearchMatchMode.contains);
+    expect(sortOrder.value, NoteSortOrder.updatedDesc);
+    expect(find.text('全部笔记'), findsOneWidget);
   });
+}
+
+Future<void> _insertSubject(
+  AppDatabase db, {
+  required String id,
+  required String name,
+  required int level,
+  String? parentId,
+}) async {
+  await db.subjectDao.insertSubject(
+    SubjectsCompanion(
+      id: Value(id),
+      parentId: Value(parentId),
+      name: Value(name),
+      level: Value(level),
+      createdAt: const Value(1),
+      updatedAt: const Value(1),
+    ),
+  );
 }
 
 T _successValue<T>(Result<T> result) {
