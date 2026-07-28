@@ -11,6 +11,7 @@ import 'note_list_view_model.dart';
 import 'note_search_view_model.dart';
 import 'note_version_view_model.dart';
 import 'subject_manage_view_model.dart';
+import 'subject_scope_picker_view_model.dart';
 import 'subject_tree_view_model.dart';
 import 'tag_management_view_model.dart';
 import 'tag_search_view_model.dart';
@@ -63,5 +64,12 @@ final noteSearchVmProvider =
 final tagSearchVmProvider =
     AsyncNotifierProvider.autoDispose<TagSearchVm, TagSearchState>(
       TagSearchVm.new,
+      retry: (_, _) => null,
+    );
+
+/// 搜索范围弹窗会话；sessionKey 隔离每次打开并在关闭后自动销毁。
+final subjectScopePickerVmProvider = AsyncNotifierProvider.autoDispose
+    .family<SubjectScopePickerVm, SubjectScopePickerState, Object>(
+      SubjectScopePickerVm.new,
       retry: (_, _) => null,
     );

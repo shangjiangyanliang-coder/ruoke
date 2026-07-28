@@ -153,6 +153,8 @@ void main() {
 
     await tester.tap(find.byTooltip('选择标签搜索范围'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('选择全部或指定层级'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('全部章').last);
     await tester.pumpAndSettle();
     expect(find.text('章内重点'), findsOneWidget);

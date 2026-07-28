@@ -158,12 +158,7 @@ void main() {
   testWidgets('搜索范围支持指定书子树和全部章直接归属', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    await _insertSubject(
-      db,
-      id: 'book-a',
-      name: '书 A',
-      level: 0,
-    );
+    await _insertSubject(db, id: 'book-a', name: '书 A', level: 0);
     await _insertSubject(
       db,
       id: 'chapter-a',
@@ -178,12 +173,7 @@ void main() {
       name: '节 A',
       level: 2,
     );
-    await _insertSubject(
-      db,
-      id: 'book-b',
-      name: '书 B',
-      level: 0,
-    );
+    await _insertSubject(db, id: 'book-b', name: '书 B', level: 0);
     final notes = LocalNoteRepository(db);
     await notes.create(subjectId: 'book-a', title: '书 A 笔记');
     await notes.create(subjectId: 'chapter-a', title: '章 A 笔记');
@@ -209,6 +199,8 @@ void main() {
 
     await tester.tap(find.byTooltip('选择搜索范围'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('选择全部或指定层级'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('全部章').last);
     await tester.pumpAndSettle();
     expect(find.text('章 A 笔记'), findsOneWidget);
@@ -233,10 +225,7 @@ void main() {
             ),
           ),
         ),
-        GoRoute(
-          path: '/search',
-          builder: (_, _) => const NoteSearchView(),
-        ),
+        GoRoute(path: '/search', builder: (_, _) => const NoteSearchView()),
       ],
     );
     addTearDown(router.dispose);

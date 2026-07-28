@@ -10,7 +10,6 @@ import '../models/note_search_query.dart';
 import '../models/search_match_mode.dart';
 import '../models/subject_scope.dart';
 import '../models/tag.dart';
-import '../view_model/subject_manage_view_model.dart';
 import '../view_model/tag_search_view_model.dart';
 import '../view_model/view_model_providers.dart';
 import 'subject_scope_picker.dart';
@@ -42,21 +41,17 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
   @override
   Widget build(BuildContext context) {
     final search = ref.watch(tagSearchVmProvider);
-    final subjects = ref.watch(subjectManageVmProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('标签搜索')),
       body: search.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('加载失败：$error')),
-        data: (state) => _buildContent(state, subjects),
+        data: _buildContent,
       ),
     );
   }
 
-  Widget _buildContent(
-    TagSearchState state,
-    AsyncValue<SubjectManageState> subjects,
-  ) {
+  Widget _buildContent(TagSearchState state) {
     final visibleTags = <String, Tag>{
       ..._selectedTags,
       for (final tag in state.matchedTags) tag.id: tag,
@@ -111,9 +106,7 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
               Tooltip(
                 message: '选择标签搜索范围',
                 child: OutlinedButton.icon(
-                  onPressed: subjects.value == null
-                      ? null
-                      : () => _pickSubjectScope(subjects.value!),
+                  onPressed: _pickSubjectScope,
                   icon: const Icon(Icons.account_tree_outlined),
                   label: Text(_subjectScopeLabel),
                 ),
@@ -238,11 +231,8 @@ class _TagSearchViewState extends ConsumerState<TagManagementView> {
     ref.read(tagSearchVmProvider.notifier).setSelectedTagIds(ids);
   }
 
-  Future<void> _pickSubjectScope(SubjectManageState subjects) async {
-    final selection = await showSubjectScopePicker(
-      context: context,
-      subjects: subjects.subjects,
-    );
+  Future<void> _pickSubjectScope() async {
+    final selection = await showSubjectScopePicker(context: context);
     if (selection == null || !mounted) return;
     setState(() {
       _subjectScope = selection.scope;

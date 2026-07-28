@@ -7,7 +7,6 @@ import '../models/note.dart';
 import '../models/note_search_query.dart';
 import '../models/search_match_mode.dart';
 import '../models/subject_scope.dart';
-import '../view_model/subject_manage_view_model.dart';
 import '../view_model/view_model_providers.dart';
 import 'subject_scope_picker.dart';
 
@@ -44,7 +43,6 @@ class _NoteSearchViewState extends ConsumerState<NoteSearchView> {
   Widget build(BuildContext context) {
     final search = ref.watch(noteSearchVmProvider);
     final tags = ref.watch(tagManagementVmProvider);
-    final subjects = ref.watch(subjectManageVmProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('搜索笔记')),
       body: Column(
@@ -98,9 +96,7 @@ class _NoteSearchViewState extends ConsumerState<NoteSearchView> {
                 Tooltip(
                   message: '选择搜索范围',
                   child: OutlinedButton.icon(
-                    onPressed: subjects.value == null
-                        ? null
-                        : () => _pickSubjectScope(subjects.value!),
+                    onPressed: _pickSubjectScope,
                     icon: const Icon(Icons.account_tree_outlined),
                     label: Text(_subjectScopeLabel),
                   ),
@@ -206,11 +202,8 @@ class _NoteSearchViewState extends ConsumerState<NoteSearchView> {
         .setTagIds(Set.unmodifiable(_selectedTagIds));
   }
 
-  Future<void> _pickSubjectScope(SubjectManageState subjects) async {
-    final selection = await showSubjectScopePicker(
-      context: context,
-      subjects: subjects.subjects,
-    );
+  Future<void> _pickSubjectScope() async {
+    final selection = await showSubjectScopePicker(context: context);
     if (selection == null || !mounted) return;
     setState(() {
       _subjectScope = selection.scope;
