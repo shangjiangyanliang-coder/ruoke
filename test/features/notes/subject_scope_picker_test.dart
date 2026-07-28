@@ -53,6 +53,40 @@ void main() {
     expect(find.text('数学 > 函数'), findsOneWidget);
   });
 
+  testWidgets('多个搜索结果会合并共同的书和章祖先', (tester) async {
+    final db = await _databaseWithTree();
+    addTearDown(db.close);
+    await _insertSubject(
+      db,
+      id: 'theorem-a',
+      parentId: 'chapter',
+      name: '定理一',
+      level: 2,
+    );
+    await _insertSubject(
+      db,
+      id: 'theorem-b',
+      parentId: 'chapter',
+      name: '定理二',
+      level: 2,
+    );
+    await _pumpHarness(tester, db);
+
+    await tester.tap(find.text('打开范围'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('subject-scope-search')),
+      '定理',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('数学'), findsOneWidget);
+    expect(find.text('函数'), findsOneWidget);
+    expect(find.text('定理一'), findsOneWidget);
+    expect(find.text('定理二'), findsOneWidget);
+  });
+
   testWidgets('层级快捷入口可选择全部章', (tester) async {
     final db = await _databaseWithTree();
     addTearDown(db.close);

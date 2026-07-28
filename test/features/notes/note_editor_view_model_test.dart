@@ -284,6 +284,32 @@ void main() {
     expect(repository.createCallCount, 1);
   });
 
+  test('首次创建保存期间继续修改标签会保留最新标签草稿', () async {
+    final repository = _DelayedCreateRepository();
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(noteEditorVmProvider.notifier);
+    await notifier.init('new');
+    notifier.addTagName('保存前');
+    final save = notifier.save(
+      title: '标题',
+      contentJson: '[{"insert":"正文\\n"}]',
+      hasVisibleContent: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    notifier.addTagName('保存期间');
+    repository.completeCreate();
+
+    expect(await save, NoteSaveResult.saved);
+    final state = container.read(noteEditorVmProvider).value;
+    expect(state?.tagNames, const ['保存前', '保存期间']);
+    expect(state?.dirty, isTrue);
+  });
+
   test('已有标签作为编辑器草稿加载且保存前不写数据库', () async {
     final repository = _CreateReturnsNoteRepository()
       ..noteToLoad = _note(id: 'existing-note', title: '标题');
@@ -298,10 +324,7 @@ void main() {
 
     final notifier = container.read(noteEditorVmProvider.notifier);
     await notifier.init('existing-note');
-    expect(
-      container.read(noteEditorVmProvider).value?.tagNames,
-      const ['旧标签'],
-    );
+    expect(container.read(noteEditorVmProvider).value?.tagNames, const ['旧标签']);
 
     notifier.addTagName(' 新标签 ');
     notifier.removeTagName('旧标签');
@@ -421,24 +444,16 @@ class _TagRepositoryStub implements TagRepository {
   _TagRepositoryStub(this.names);
 
   @override
-  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success(
-    [
-      for (var index = 0; index < names.length; index++)
-        Tag(
-          id: 'tag-$index',
-          name: names[index],
-          color: null,
-          createdAt: 1,
-        ),
-    ],
-  );
+  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success([
+    for (var index = 0; index < names.length; index++)
+      Tag(id: 'tag-$index', name: names[index], color: null, createdAt: 1),
+  ]);
 
   @override
   Future<Result<List<Tag>>> attachTagsByNames({
     required String noteId,
     required Iterable<String> names,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<Tag>> createTag({required String name, String? color}) =>
@@ -451,8 +466,7 @@ class _TagRepositoryStub implements TagRepository {
   Future<Result<Tag>> findOrCreateAndAttachTag({
     required String noteId,
     required String tagName,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<TagWithCount>>> listTags() => throw UnimplementedError();
@@ -465,15 +479,13 @@ class _TagRepositoryStub implements TagRepository {
   Future<Result<void>> replaceNoteTags({
     required String noteId,
     required List<String> tagIds,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<Tag>>> searchTags({
     required String keyword,
     required SearchMatchMode matchMode,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 class _DelayedLoadRepository extends _CreateReturnsNoteRepository {

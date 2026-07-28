@@ -14,7 +14,7 @@ import '../note_constants.dart';
 import '../providers.dart';
 
 /// 编辑器保存结果：区分成功、空新笔记跳过和真实失败。
-enum NoteSaveResult { saved, savedWithTagFailure, skippedEmpty, failed }
+enum NoteSaveResult { saved, skippedEmpty, failed }
 
 /// 编辑器状态：当前编辑的笔记 + 是否有未保存改动。
 class NoteEditorState {
@@ -115,9 +115,7 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
         NoteEditorState(
           note: note,
           ready: true,
-          tagNames: List.unmodifiable(
-            tagsResult.value.map((tag) => tag.name),
-          ),
+          tagNames: List.unmodifiable(tagsResult.value.map((tag) => tag.name)),
         ),
       );
     } catch (e, s) {
@@ -200,13 +198,14 @@ class NoteEditorVm extends AsyncNotifier<NoteEditorState> {
         final note = r.value;
         // 保存期间可能已切换编辑对象；旧请求成功也不能覆盖新会话。
         if (generation == _initGeneration) {
+          final latest = state.value ?? cur;
           // 新建后必须转为已存态；若保存期间继续编辑，则保留未保存标记。
           state = AsyncData(
             NoteEditorState(
               note: note,
               ready: true,
               dirty: revision != _editRevision,
-              tagNames: cur.tagNames,
+              tagNames: latest.tagNames,
             ),
           );
         }

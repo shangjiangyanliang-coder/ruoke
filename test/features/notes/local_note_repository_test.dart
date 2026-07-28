@@ -151,10 +151,25 @@ void main() {
     expect(result, isA<Success<void>>());
     final versions = _successValue(await repository.listVersions(noteId));
     expect(versions, hasLength(1));
-    expect(
-      NoteEditSnapshot.decode(versions.single.snapshotJson).title,
-      '旧标题',
-    );
+    expect(NoteEditSnapshot.decode(versions.single.snapshotJson).title, '旧标题');
+  });
+
+  test('显式传入空标题会清空已有标题并保存旧标题版本', () async {
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '旧标题',
+        contentJson: _delta([_op('正文')]),
+      ),
+    ).id;
+
+    final result = await repository.update(id: noteId, title: '');
+
+    expect(result, isA<Success<void>>());
+    expect(_successValue(await repository.getById(noteId))?.title, isNull);
+    final versions = _successValue(await repository.listVersions(noteId));
+    expect(versions, hasLength(1));
+    expect(NoteEditSnapshot.decode(versions.single.snapshotJson).title, '旧标题');
   });
 
   test('完整状态没有变化时不会新增历史版本', () async {
@@ -277,6 +292,39 @@ void main() {
     final tags = _successValue(await tagRepository.listTagsForNote(noteId));
     expect(note?.title, '当前标题');
     expect(note?.contentJson, legacyContent);
+    expect(tags.map((tag) => tag.name), ['当前标签']);
+  });
+
+  test('损坏的旧正文快照恢复失败且不会覆盖当前状态', () async {
+    final currentContent = _delta([_op('当前正文')]);
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        title: '当前标题',
+        contentJson: currentContent,
+        tagNames: const ['当前标签'],
+      ),
+    ).id;
+    await db.noteVersionDao.insertVersion(
+      NoteVersionsCompanion(
+        id: const Value('broken-version'),
+        noteId: Value(noteId),
+        versionNo: const Value(1),
+        snapshotJson: const Value('[{}]'),
+        createdAt: const Value(1),
+      ),
+    );
+
+    final result = await repository.restoreVersion(
+      noteId: noteId,
+      versionNo: 1,
+    );
+
+    expect(result, isA<Failure<void>>());
+    final note = _successValue(await repository.getById(noteId));
+    final tags = _successValue(await tagRepository.listTagsForNote(noteId));
+    expect(note?.title, '当前标题');
+    expect(note?.contentJson, currentContent);
     expect(tags.map((tag) => tag.name), ['当前标签']);
   });
 

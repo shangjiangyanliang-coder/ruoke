@@ -127,7 +127,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final result = await ref
         .read(noteEditorVmProvider.notifier)
         .save(
-          title: (title == null || title.isEmpty) ? null : title,
+          // 空字符串表示用户明确清空标题；null 保留给 Repository 的“未提供”语义。
+          title: title ?? '',
           contentJson: _currentDeltaJson(),
           hasVisibleContent: _hasVisibleContent(),
         );
@@ -384,7 +385,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       if (context.mounted) {
                         final message = switch (result) {
                           NoteSaveResult.saved => '已保存',
-                          NoteSaveResult.savedWithTagFailure => '笔记已保存，但标签保存失败',
                           NoteSaveResult.skippedEmpty => '空笔记不会保存',
                           NoteSaveResult.failed => '保存失败',
                         };

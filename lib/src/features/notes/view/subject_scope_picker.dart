@@ -170,11 +170,15 @@ class _PickerBody extends StatelessWidget {
       if (state.searchPaths.isEmpty) {
         return const Center(child: Text('没有匹配的书、章或节'));
       }
+      final searchRoots = _mergeSearchPaths(
+        state.searchPaths.map((path) => path.nodes),
+      );
       return ListView(
         children: [
-          for (final path in state.searchPaths)
-            _SearchPathTile(
-              path: path.nodes,
+          for (final root in searchRoots)
+            _SearchTreeTile(
+              node: root,
+              pathNames: [root.subject.name],
               state: state,
               onToggle: onToggle,
               onRetryBranch: onRetryBranch,
@@ -264,14 +268,41 @@ class _SubjectTreeTile extends StatelessWidget {
   }
 }
 
-class _SearchPathTile extends StatelessWidget {
-  final List<Subject> path;
+class _SearchTreeNode {
+  final Subject subject;
+  final Map<String, _SearchTreeNode> children = {};
+  bool matched = false;
+
+  _SearchTreeNode(this.subject);
+}
+
+List<_SearchTreeNode> _mergeSearchPaths(Iterable<List<Subject>> paths) {
+  final roots = <String, _SearchTreeNode>{};
+  for (final path in paths) {
+    Map<String, _SearchTreeNode> siblings = roots;
+    _SearchTreeNode? current;
+    for (final subject in path) {
+      current = siblings.putIfAbsent(
+        subject.id,
+        () => _SearchTreeNode(subject),
+      );
+      siblings = current.children;
+    }
+    if (current != null) current.matched = true;
+  }
+  return roots.values.toList();
+}
+
+class _SearchTreeTile extends StatelessWidget {
+  final _SearchTreeNode node;
+  final List<String> pathNames;
   final SubjectScopePickerState state;
   final Future<void> Function(String id) onToggle;
   final Future<void> Function(String id) onRetryBranch;
 
-  const _SearchPathTile({
-    required this.path,
+  const _SearchTreeTile({
+    required this.node,
+    required this.pathNames,
     required this.state,
     required this.onToggle,
     required this.onRetryBranch,
@@ -279,20 +310,29 @@ class _SearchPathTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final target = path.last;
-    final ancestors = path.take(path.length - 1).map((node) => node.name);
-    final expandable = target.level < 2;
-    final expanded = state.expandedIds.contains(target.id);
-    final children = state.childrenByParent[target.id] ?? const <Subject>[];
+    final subject = node.subject;
+    final expandable = subject.level < 2;
+    final expanded = state.expandedIds.contains(subject.id);
+    final visibleChildren = <_SearchTreeNode>[...node.children.values];
+    if (expanded) {
+      for (final child
+          in state.childrenByParent[subject.id] ?? const <Subject>[]) {
+        if (visibleChildren.every((node) => node.subject.id != child.id)) {
+          visibleChildren.add(_SearchTreeNode(child));
+        }
+      }
+    }
+    final ancestors = pathNames.take(pathNames.length - 1).join(' > ');
     return Column(
       children: [
         ListTile(
+          contentPadding: EdgeInsets.only(left: subject.level * 20, right: 4),
           leading: expandable
               ? IconButton(
-                  key: ValueKey('scope-search-expand-${target.id}'),
-                  tooltip: expanded ? '收起${target.name}' : '展开${target.name}',
-                  onPressed: () => onToggle(target.id),
-                  icon: state.loadingParentIds.contains(target.id)
+                  key: ValueKey('scope-search-expand-${subject.id}'),
+                  tooltip: expanded ? '收起${subject.name}' : '展开${subject.name}',
+                  onPressed: () => onToggle(subject.id),
+                  icon: state.loadingParentIds.contains(subject.id)
                       ? const SizedBox.square(
                           dimension: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
@@ -301,29 +341,26 @@ class _SearchPathTile extends StatelessWidget {
                           expanded ? Icons.expand_more : Icons.chevron_right,
                         ),
                 )
-              : _levelIcon(target.level),
-          title: Text(target.name),
-          subtitle: ancestors.isEmpty ? null : Text(ancestors.join(' > ')),
-          onTap: () => _selectSubject(
-            context,
-            target,
-            path.map((node) => node.name).toList(),
-          ),
+              : _levelIcon(subject.level),
+          title: Text(subject.name),
+          subtitle: node.matched && ancestors.isNotEmpty
+              ? Text(ancestors)
+              : null,
+          onTap: () => _selectSubject(context, subject, pathNames),
         ),
-        if (expanded && state.branchErrors[target.id] != null)
+        if (expanded && state.branchErrors[subject.id] != null)
           _InlineError(
-            message: state.branchErrors[target.id]!.userMessage,
-            onRetry: () => onRetryBranch(target.id),
+            message: state.branchErrors[subject.id]!.userMessage,
+            onRetry: () => onRetryBranch(subject.id),
           ),
-        if (expanded)
-          for (final child in children)
-            _SubjectTreeTile(
-              subject: child,
-              pathNames: [...path.map((node) => node.name), child.name],
-              state: state,
-              onToggle: onToggle,
-              onRetryBranch: onRetryBranch,
-            ),
+        for (final child in visibleChildren)
+          _SearchTreeTile(
+            node: child,
+            pathNames: [...pathNames, child.subject.name],
+            state: state,
+            onToggle: onToggle,
+            onRetryBranch: onRetryBranch,
+          ),
       ],
     );
   }

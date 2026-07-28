@@ -172,7 +172,9 @@ class LocalNoteRepository implements NoteRepository {
           throw StateError('笔记不存在: $id');
         }
         final oldTagNames = await _listTagNames(id);
-        final nextTitle = title ?? old.title;
+        final nextTitle = title == null
+            ? old.title
+            : (title.trim().isEmpty ? null : title.trim());
         final nextContentJson = contentJson ?? old.contentJson;
         final nextTagNames = tagNames == null
             ? oldTagNames

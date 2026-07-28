@@ -38,6 +38,12 @@ void main() {
       throwsFormatException,
     );
     expect(() => NoteEditSnapshot.decode('"正文"'), throwsFormatException);
+    expect(() => NoteEditSnapshot.decode('[1]'), throwsFormatException);
+    expect(() => NoteEditSnapshot.decode('[{}]'), throwsFormatException);
+    expect(
+      () => NoteEditSnapshot.decode('[{"insert":1}]'),
+      throwsFormatException,
+    );
   });
 
   test('完整状态比较忽略标签输入顺序但区分标题正文', () {

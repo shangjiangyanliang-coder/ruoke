@@ -37,6 +37,9 @@ class NoteEditSnapshot {
       throw const FormatException('历史版本 JSON 已损坏');
     }
     if (decoded is List<dynamic>) {
+      if (!_isLegacyDocumentDelta(decoded)) {
+        throw const FormatException('旧历史版本正文格式错误');
+      }
       return NoteEditSnapshot(
         title: null,
         contentJson: snapshotJson,
@@ -65,6 +68,20 @@ class NoteEditSnapshot {
       contentJson: contentJson as String?,
       tagNames: tagNames.cast<String>(),
     );
+  }
+
+  /// 历史正文是可重建文档的插入 Delta，不接受 retain/delete 或缺失 insert。
+  static bool _isLegacyDocumentDelta(List<dynamic> operations) {
+    for (final operation in operations) {
+      if (operation is! Map<String, dynamic>) return false;
+      final insert = operation['insert'];
+      if (insert is! String && insert is! Map<String, dynamic>) return false;
+      final attributes = operation['attributes'];
+      if (attributes != null && attributes is! Map<String, dynamic>) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// 标签关联没有顺序语义，因此比较完整状态时忽略标签排列顺序。
