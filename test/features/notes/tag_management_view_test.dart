@@ -1,4 +1,5 @@
-// 标签管理页入口、增改删与多选筛选交互测试。
+// 标签搜索页入口、匹配模式、多标签并集与范围交互测试。
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ruoke/main.dart';
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/result.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
 import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
@@ -14,7 +16,7 @@ import 'package:ruoke/src/features/notes/view/tag_management_view.dart';
 import 'package:ruoke/src/routing/app_router.dart';
 
 void main() {
-  testWidgets('笔记列表顶栏提供搜索和标签管理入口', (tester) async {
+  testWidgets('笔记列表顶栏提供通用搜索和标签搜索入口', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
     appRouter.go('/notes');
@@ -28,30 +30,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('搜索笔记'), findsOneWidget);
-    expect(find.byTooltip('标签管理'), findsOneWidget);
+    expect(find.byTooltip('标签搜索'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('搜索笔记'));
+    await tester.tap(find.byTooltip('标签搜索'));
     await tester.pumpAndSettle();
-    expect(find.text('搜索笔记'), findsWidgets);
-    appRouter.pop();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('标签管理'));
-    await tester.pumpAndSettle();
-    expect(find.text('标签管理'), findsOneWidget);
+    expect(find.text('标签搜索'), findsOneWidget);
+    expect(find.text('请先搜索并选择标签'), findsOneWidget);
   });
 
-  testWidgets('标签页支持新建、改名和删除二次确认', (tester) async {
+  testWidgets('标签名称支持部分完全匹配和多标签并集', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
-    final repository = LocalTagRepository(db);
-    final oldTag = _successValue(await repository.createTag(name: '旧标签'));
-    final note = _successValue(
-      await LocalNoteRepository(
-        db,
-      ).create(subjectId: 'uncategorized', title: '计数笔记'),
+    final tags = LocalTagRepository(db);
+    final notes = LocalNoteRepository(db);
+    final review = _successValue(await tags.createTag(name: '复习'));
+    final finalReview = _successValue(await tags.createTag(name: '期末复习'));
+    await tags.createTag(name: '错题');
+    final first = _successValue(
+      await notes.create(subjectId: 'uncategorized', title: '复习笔记'),
     );
-    await repository.replaceNoteTags(noteId: note.id, tagIds: [oldTag.id]);
+    final second = _successValue(
+      await notes.create(subjectId: 'uncategorized', title: '期末笔记'),
+    );
+    await notes.create(subjectId: 'uncategorized', title: '无标签笔记');
+    await tags.replaceNoteTags(noteId: first.id, tagIds: [review.id]);
+    await tags.replaceNoteTags(noteId: second.id, tagIds: [finalReview.id]);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -60,72 +63,120 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('1 条笔记'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('新建标签'));
+    await tester.enterText(
+      find.byKey(const ValueKey('tag-search-keyword')),
+      '复',
+    );
+    await tester.tap(find.byTooltip('执行标签搜索'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '新标签');
-    await tester.tap(find.widgetWithText(FilledButton, '新建'));
-    await tester.pumpAndSettle();
-    expect(find.text('新标签'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, '复习'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, '期末复习'), findsOneWidget);
+    expect(find.text('错题'), findsNothing);
 
-    await tester.tap(find.byTooltip('改名').first);
+    await tester.enterText(
+      find.byKey(const ValueKey('tag-search-keyword')),
+      '复习',
+    );
+    await tester.tap(find.byType(DropdownButton<SearchMatchMode>));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '已改名');
-    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.tap(find.text('完全匹配').last);
     await tester.pumpAndSettle();
-    expect(find.text('已改名'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, '复习'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, '期末复习'), findsNothing);
 
-    await tester.tap(find.byTooltip('删除').first);
+    await tester.tap(find.widgetWithText(FilterChip, '复习'));
     await tester.pumpAndSettle();
-    expect(find.text('删除标签？'), findsOneWidget);
-    expect(find.text('已改名'), findsWidgets);
+    await tester.tap(find.byType(DropdownButton<SearchMatchMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('部分匹配').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, '期末复习'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(TextButton, '删除'));
-    await tester.pumpAndSettle();
-    expect(find.text('已改名'), findsNothing);
+    expect(find.text('复习笔记'), findsOneWidget);
+    expect(find.text('期末笔记'), findsOneWidget);
+    expect(find.text('无标签笔记'), findsNothing);
   });
 
-  testWidgets('生产路由解析多选标签并显示并集搜索结果', (tester) async {
+  testWidgets('标签搜索可按指定书和全部章限制结果', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
+    await _insertSubject(db, id: 'book-a', name: '书 A', level: 0);
+    await _insertSubject(
+      db,
+      id: 'chapter-a',
+      name: '章 A',
+      level: 1,
+      parentId: 'book-a',
+    );
+    await _insertSubject(db, id: 'book-b', name: '书 B', level: 0);
     final tags = LocalTagRepository(db);
     final notes = LocalNoteRepository(db);
-    final firstTag = _successValue(await tags.createTag(name: '重点'));
-    final secondTag = _successValue(await tags.createTag(name: '待复习'));
-    final firstNote = _successValue(
-      await notes.create(subjectId: 'uncategorized', title: '重点笔记'),
+    final tag = _successValue(await tags.createTag(name: '重点'));
+    final bookNote = _successValue(
+      await notes.create(subjectId: 'book-a', title: '书内重点'),
     );
-    final secondNote = _successValue(
-      await notes.create(subjectId: 'uncategorized', title: '复习笔记'),
+    final chapterNote = _successValue(
+      await notes.create(subjectId: 'chapter-a', title: '章内重点'),
     );
-    await notes.create(subjectId: 'uncategorized', title: '无标签笔记');
-    await tags.replaceNoteTags(noteId: firstNote.id, tagIds: [firstTag.id]);
-    await tags.replaceNoteTags(noteId: secondNote.id, tagIds: [secondTag.id]);
-    appRouter.go('/notes');
+    final otherBook = _successValue(
+      await notes.create(subjectId: 'book-b', title: '其他书重点'),
+    );
+    for (final note in [bookNote, chapterNote, otherBook]) {
+      await tags.replaceNoteTags(noteId: note.id, tagIds: [tag.id]);
+    }
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appDatabaseProvider.overrideWithValue(db)],
-        child: const RuokeApp(),
+        child: const MaterialApp(home: TagManagementView()),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('标签管理'));
+    await tester.enterText(
+      find.byKey(const ValueKey('tag-search-keyword')),
+      '重点',
+    );
+    await tester.tap(find.byTooltip('执行标签搜索'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, '重点'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('重点'));
-    await tester.pump();
-    await tester.tap(find.text('待复习'));
-    await tester.pump();
-    await tester.tap(find.text('筛选已选标签 (2)'));
+    await tester.tap(find.byTooltip('选择标签搜索范围'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('书 A').last);
+    await tester.pumpAndSettle();
+    expect(find.text('书内重点'), findsOneWidget);
+    expect(find.text('章内重点'), findsOneWidget);
+    expect(find.text('其他书重点'), findsNothing);
 
-    expect(find.text('搜索笔记'), findsWidgets);
-    expect(find.text('重点笔记'), findsOneWidget);
-    expect(find.text('复习笔记'), findsOneWidget);
-    expect(find.text('无标签笔记'), findsNothing);
+    await tester.tap(find.byTooltip('选择标签搜索范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全部章').last);
+    await tester.pumpAndSettle();
+    expect(find.text('章内重点'), findsOneWidget);
+    expect(find.text('书内重点'), findsNothing);
   });
+}
+
+Future<void> _insertSubject(
+  AppDatabase db, {
+  required String id,
+  required String name,
+  required int level,
+  String? parentId,
+}) async {
+  await db.subjectDao.insertSubject(
+    SubjectsCompanion(
+      id: Value(id),
+      parentId: Value(parentId),
+      name: Value(name),
+      level: Value(level),
+      createdAt: const Value(1),
+      updatedAt: const Value(1),
+    ),
+  );
 }
 
 T _successValue<T>(Result<T> result) {
