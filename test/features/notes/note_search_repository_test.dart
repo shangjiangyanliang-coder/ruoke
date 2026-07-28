@@ -8,6 +8,8 @@ import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
+import 'package:ruoke/src/features/notes/models/subject_scope.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
 import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
 
@@ -173,11 +175,160 @@ void main() {
       expect(notes.map((note) => note.id), ['note-a', 'note-b']);
     }
   });
+
+  test('完全匹配会修剪标题和正文首尾空白且不匹配包含关系', () async {
+    await _insertNote(
+      db,
+      id: 'exact-title',
+      title: '代数',
+      updatedAt: 10,
+    );
+    await _insertNote(
+      db,
+      id: 'contains-title',
+      title: '线性代数',
+      updatedAt: 20,
+    );
+    await _insertNote(
+      db,
+      id: 'exact-body',
+      plainText: '  代数\n',
+      updatedAt: 30,
+    );
+
+    final exact = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(
+          keyword: '  代数  ',
+          keywordMatchMode: SearchMatchMode.exact,
+        ),
+      ),
+    );
+    final contains = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(
+          keyword: '代数',
+          keywordMatchMode: SearchMatchMode.contains,
+        ),
+      ),
+    );
+
+    expect(exact.map((note) => note.id), ['exact-body', 'exact-title']);
+    expect(contains.map((note) => note.id), [
+      'exact-body',
+      'contains-title',
+      'exact-title',
+    ]);
+  });
+
+  test('指定书章节范围按节点自身和后代筛选笔记', () async {
+    await _insertSubjectTree(db);
+    await _insertScopeNotes(db);
+
+    final book = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(
+          subjectScope: SubjectScope.subtree('book-a'),
+        ),
+      ),
+    );
+    final chapter = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(
+          subjectScope: SubjectScope.subtree('chapter-a'),
+        ),
+      ),
+    );
+    final section = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(
+          subjectScope: SubjectScope.subtree('section-a'),
+        ),
+      ),
+    );
+
+    expect(book.map((note) => note.id).toSet(), {
+      'book-a-note',
+      'chapter-a-note',
+      'section-a-note',
+      'chapter-b-note',
+    });
+    expect(chapter.map((note) => note.id).toSet(), {
+      'chapter-a-note',
+      'section-a-note',
+    });
+    expect(section.map((note) => note.id), ['section-a-note']);
+  });
+
+  test('指定层级只搜索直接归属于全部书章节的笔记', () async {
+    await _insertSubjectTree(db);
+    await _insertScopeNotes(db);
+
+    final books = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(subjectScope: SubjectScope.level(0)),
+      ),
+    );
+    final chapters = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(subjectScope: SubjectScope.level(1)),
+      ),
+    );
+    final sections = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(subjectScope: SubjectScope.level(2)),
+      ),
+    );
+
+    expect(books.map((note) => note.id).toSet(), {
+      'book-a-note',
+      'book-b-note',
+    });
+    expect(chapters.map((note) => note.id).toSet(), {
+      'chapter-a-note',
+      'chapter-b-note',
+    });
+    expect(sections.map((note) => note.id), ['section-a-note']);
+  });
+
+  test('全部范围包含未分类而指定范围排除未分类', () async {
+    await _insertSubjectTree(db);
+    await _insertScopeNotes(db);
+
+    final all = _successValue(
+      await noteRepository.search(const NoteSearchQuery()),
+    );
+    final books = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(subjectScope: SubjectScope.level(0)),
+      ),
+    );
+
+    expect(all.map((note) => note.id), contains('uncategorized-note'));
+    expect(books.map((note) => note.id), isNot(contains('uncategorized-note')));
+  });
+
+  test('指定不存在或已软删除的节点返回范围已不存在', () async {
+    await _insertSubjectTree(db);
+    await db.subjectDao.softDelete('chapter-a', 99);
+
+    for (final subjectId in ['missing', 'chapter-a']) {
+      final result = await noteRepository.search(
+        NoteSearchQuery(subjectScope: SubjectScope.subtree(subjectId)),
+      );
+
+      expect(result, isA<Failure<List<Note>>>());
+      final exception = (result as Failure<List<Note>>).exception;
+      expect(exception, isA<ValidationException>());
+      expect(exception.userMessage, '所选范围已不存在，请重新选择');
+    }
+  });
 }
 
 Future<void> _insertNote(
   AppDatabase db, {
   required String id,
+  String subjectId = 'uncategorized',
   String? title,
   String plainText = '',
   int updatedAt = 1,
@@ -185,13 +336,84 @@ Future<void> _insertNote(
   await db.noteDao.insertNote(
     NotesCompanion(
       id: Value(id),
-      subjectId: const Value('uncategorized'),
+      subjectId: Value(subjectId),
       title: Value(title),
       plainText: Value(plainText),
       createdAt: const Value(1),
       updatedAt: Value(updatedAt),
     ),
   );
+}
+
+Future<void> _insertSubjectTree(AppDatabase db) async {
+  for (final subject in [
+    (
+      id: 'book-a',
+      parentId: null,
+      name: '书 A',
+      level: 0,
+      sortOrder: 0,
+    ),
+    (
+      id: 'chapter-a',
+      parentId: 'book-a',
+      name: '章 A',
+      level: 1,
+      sortOrder: 0,
+    ),
+    (
+      id: 'section-a',
+      parentId: 'chapter-a',
+      name: '节 A',
+      level: 2,
+      sortOrder: 0,
+    ),
+    (
+      id: 'chapter-b',
+      parentId: 'book-a',
+      name: '章 B',
+      level: 1,
+      sortOrder: 1,
+    ),
+    (
+      id: 'book-b',
+      parentId: null,
+      name: '书 B',
+      level: 0,
+      sortOrder: 1,
+    ),
+  ]) {
+    await db.subjectDao.insertSubject(
+      SubjectsCompanion(
+        id: Value(subject.id),
+        parentId: Value(subject.parentId),
+        name: Value(subject.name),
+        level: Value(subject.level),
+        sortOrder: Value(subject.sortOrder),
+        createdAt: const Value(1),
+        updatedAt: const Value(1),
+      ),
+    );
+  }
+}
+
+Future<void> _insertScopeNotes(AppDatabase db) async {
+  final fixtures = [
+    (id: 'book-a-note', subjectId: 'book-a', updatedAt: 10),
+    (id: 'chapter-a-note', subjectId: 'chapter-a', updatedAt: 20),
+    (id: 'section-a-note', subjectId: 'section-a', updatedAt: 30),
+    (id: 'chapter-b-note', subjectId: 'chapter-b', updatedAt: 40),
+    (id: 'book-b-note', subjectId: 'book-b', updatedAt: 50),
+    (id: 'uncategorized-note', subjectId: 'uncategorized', updatedAt: 60),
+  ];
+  for (final fixture in fixtures) {
+    await _insertNote(
+      db,
+      id: fixture.id,
+      subjectId: fixture.subjectId,
+      updatedAt: fixture.updatedAt,
+    );
+  }
 }
 
 T _successValue<T>(Result<T> result) {

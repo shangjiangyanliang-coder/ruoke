@@ -12,6 +12,9 @@ part 'note_dao.g.dart';
 /// DAO 内部排序类型，避免数据层依赖 feature 领域模型。
 enum NoteDaoSortOrder { updatedDesc, updatedAsc, titleAsc }
 
+/// DAO 内部文字匹配类型，避免数据层反向依赖 feature 领域模型。
+enum NoteDaoMatchMode { contains, exact }
+
 /// 笔记 DAO。
 @DriftAccessor(tables: [Notes])
 class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
@@ -34,17 +37,27 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
   /// 搜索未软删除笔记；多标签为并集，标签子查询避免重复笔记。
   Future<List<NoteEntity>> search({
     String? keyword,
+    required NoteDaoMatchMode matchMode,
     required Set<String> tagIds,
+    Set<String>? subjectIds,
     required NoteDaoSortOrder sortOrder,
   }) async {
     final query = select(notes);
 
     var predicate = notes.isDeleted.equals(false);
     if (keyword != null) {
-      final pattern = '%$keyword%';
-      predicate =
-          predicate &
-          (notes.title.like(pattern) | notes.plainText.like(pattern));
+      final keywordPredicate = switch (matchMode) {
+        NoteDaoMatchMode.contains =>
+          notes.title.like('%$keyword%') |
+              notes.plainText.like('%$keyword%'),
+        NoteDaoMatchMode.exact =>
+          _trimWhitespace(notes.title).equals(keyword) |
+              _trimWhitespace(notes.plainText).equals(keyword),
+      };
+      predicate = predicate & keywordPredicate;
+    }
+    if (subjectIds != null) {
+      predicate = predicate & notes.subjectId.isIn(subjectIds);
     }
     if (tagIds.isNotEmpty) {
       final taggedNoteIds = db.selectOnly(db.noteTags)
@@ -65,6 +78,13 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
 
     return query.get();
   }
+
+  /// Dart 的 trim 会处理空格、换行和制表符；SQLite TRIM 第二参数用同一字符集。
+  Expression<String> _trimWhitespace(Expression<String> expression) =>
+      FunctionCallExpression<String>('TRIM', [
+        expression,
+        const Variable<String>(' \n\r\t'),
+      ]);
 
   /// 按 subject 列出未软删笔记（不含已删）。
   Future<List<NoteEntity>> listBySubject(String subjectId) {

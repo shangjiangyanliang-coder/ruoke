@@ -17,6 +17,8 @@ import '../../../utils/time_utils.dart';
 import '../models/note.dart';
 import '../models/note_search_query.dart';
 import '../models/note_version.dart';
+import '../models/search_match_mode.dart';
+import '../models/subject_scope.dart';
 import '../utils/highlight_extractor.dart';
 import 'note_repository.dart';
 
@@ -56,16 +58,57 @@ class LocalNoteRepository implements NoteRepository {
         NoteSortOrder.updatedAsc => NoteDaoSortOrder.updatedAsc,
         NoteSortOrder.titleAsc => NoteDaoSortOrder.titleAsc,
       };
+      final matchMode = switch (query.keywordMatchMode) {
+        SearchMatchMode.contains => NoteDaoMatchMode.contains,
+        SearchMatchMode.exact => NoteDaoMatchMode.exact,
+      };
+      final subjectIds = await _resolveSubjectIds(query.subjectScope);
       final entities = await _noteDao.search(
         keyword: keyword.isEmpty ? null : keyword,
+        matchMode: matchMode,
         tagIds: query.tagIds,
+        subjectIds: subjectIds,
         sortOrder: sortOrder,
       );
       return entities.map(Note.fromEntity).toList();
     },
-    orElse: (e) =>
-        const Failure(DatabaseException('搜索笔记失败', techDetail: 'search')),
+    orElse: (e) => e is ValidationException
+        ? Failure(e)
+        : const Failure(DatabaseException('搜索笔记失败', techDetail: 'search')),
   );
+
+  Future<Set<String>?> _resolveSubjectIds(SubjectScope scope) async {
+    if (scope.kind == SubjectScopeKind.all) return null;
+
+    final subjects = await _db.subjectDao.listAll();
+    if (scope.kind == SubjectScopeKind.level) {
+      return subjects
+          .where((subject) => subject.level == scope.level)
+          .map((subject) => subject.id)
+          .toSet();
+    }
+
+    final targetId = scope.subjectId!;
+    if (!subjects.any((subject) => subject.id == targetId)) {
+      throw const ValidationException('所选范围已不存在，请重新选择');
+    }
+    final childrenByParent = <String, List<String>>{};
+    for (final subject in subjects) {
+      final parentId = subject.parentId;
+      if (parentId != null) {
+        childrenByParent.putIfAbsent(parentId, () => []).add(subject.id);
+      }
+    }
+    final result = <String>{};
+    final pending = <String>[targetId];
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (result.add(current)) {
+        pending.addAll(childrenByParent[current] ?? const []);
+      }
+    }
+    return result;
+  }
 
   @override
   Future<Result<Note>> create({
