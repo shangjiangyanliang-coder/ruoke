@@ -218,9 +218,11 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               ?.userMessage ??
           '移除标签失败，请重试';
       setState(() => _tagSaveError = message);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
     }
     if (_isCurrentTagOperation(sessionKey, generation)) {
       setState(() => _tagOperationInProgress = false);

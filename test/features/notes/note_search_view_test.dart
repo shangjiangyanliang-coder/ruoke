@@ -14,7 +14,6 @@ import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
 import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
 import 'package:ruoke/src/features/notes/view/note_search_view.dart';
-import 'package:ruoke/src/features/notes/view_model/view_model_providers.dart';
 
 void main() {
   testWidgets('搜索页支持关键词、标签筛选、排序并打开结果', (tester) async {
