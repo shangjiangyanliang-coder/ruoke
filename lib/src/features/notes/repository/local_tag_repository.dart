@@ -8,6 +8,7 @@ import '../../../data/errors/app_exception.dart';
 import '../../../data/errors/result.dart';
 import '../../../utils/id_generator.dart';
 import '../../../utils/time_utils.dart';
+import '../models/search_match_mode.dart';
 import '../models/tag.dart';
 import 'tag_repository.dart';
 
@@ -19,6 +20,28 @@ class LocalTagRepository implements TagRepository {
 
   TagDao get _tagDao => _db.tagDao;
   NoteTagDao get _noteTagDao => _db.noteTagDao;
+
+  @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) {
+    final normalized = keyword.trim();
+    if (normalized.isEmpty) return Future.value(const Success([]));
+    final daoMode = switch (matchMode) {
+      SearchMatchMode.contains => TagDaoMatchMode.contains,
+      SearchMatchMode.exact => TagDaoMatchMode.exact,
+    };
+    return guard(
+      () async => (await _tagDao.searchByName(
+        normalized,
+        daoMode,
+      )).map(Tag.fromEntity).toList(),
+      orElse: (error) => const Failure(
+        DatabaseException('搜索标签失败', techDetail: 'searchTags'),
+      ),
+    );
+  }
 
   @override
   Future<Result<List<TagWithCount>>> listTags() => guard(
@@ -127,6 +150,105 @@ class LocalTagRepository implements TagRepository {
     ),
   );
 
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) async {
+    final normalized = _normalizedName(tagName);
+    if (normalized == null) {
+      return const Failure(ValidationException('标签名称不能为空'));
+    }
+    return guard(
+      () async => _db.transaction(() async {
+        await _requireActiveNote(noteId);
+        final entity = await _findOrCreateTag(normalized);
+        await _noteTagDao.insertNoteTag(
+          NoteTagEntity(
+            noteId: noteId,
+            tagId: entity.id,
+            createdAt: nowMs(),
+          ),
+        );
+        return Tag.fromEntity(entity);
+      }),
+      orElse: (error) => _attachFailure(
+        error,
+        fallbackMessage: '添加标签失败',
+        operation: 'findOrCreateAndAttachTag',
+      ),
+    );
+  }
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) async {
+    final normalizedNames = <String>[];
+    for (final name in names) {
+      final normalized = _normalizedName(name);
+      if (normalized == null) {
+        return const Failure(ValidationException('标签名称不能为空'));
+      }
+      if (!normalizedNames.contains(normalized)) {
+        normalizedNames.add(normalized);
+      }
+    }
+    return guard(
+      () async => _db.transaction(() async {
+        await _requireActiveNote(noteId);
+        final tags = <Tag>[];
+        final createdAt = nowMs();
+        for (final name in normalizedNames) {
+          final entity = await _findOrCreateTag(name);
+          await _noteTagDao.insertNoteTag(
+            NoteTagEntity(
+              noteId: noteId,
+              tagId: entity.id,
+              createdAt: createdAt,
+            ),
+          );
+          tags.add(Tag.fromEntity(entity));
+        }
+        return tags;
+      }),
+      orElse: (error) => _attachFailure(
+        error,
+        fallbackMessage: '保存笔记标签失败',
+        operation: 'attachTagsByNames',
+      ),
+    );
+  }
+
+  Future<void> _requireActiveNote(String noteId) async {
+    final note = await _db.noteDao.getById(noteId);
+    if (note == null || note.isDeleted) {
+      throw const ValidationException('笔记不存在，无法添加标签');
+    }
+  }
+
+  Future<TagEntity> _findOrCreateTag(String name) async {
+    final existing = await _tagDao.getByName(name);
+    if (existing != null) return existing;
+    final entity = TagEntity(
+      id: newId(),
+      name: name,
+      color: null,
+      createdAt: nowMs(),
+    );
+    try {
+      await _tagDao.insertTag(entity);
+      return entity;
+    } on SqliteException catch (error) {
+      if (error.extendedResultCode == 2067) {
+        final raced = await _tagDao.getByName(name);
+        if (raced != null) return raced;
+      }
+      rethrow;
+    }
+  }
+
   String? _normalizedName(String name) {
     final normalized = name.trim();
     return normalized.isEmpty ? null : normalized;
@@ -142,6 +264,20 @@ class LocalTagRepository implements TagRepository {
         DatabaseException('标签名称已存在，请换一个名称', techDetail: '$operation/unique'),
       );
     }
+    return Failure(
+      DatabaseException(
+        fallbackMessage,
+        techDetail: '$operation/${error.runtimeType}',
+      ),
+    );
+  }
+
+  Failure<T> _attachFailure<T>(
+    Object error, {
+    required String fallbackMessage,
+    required String operation,
+  }) {
+    if (error is ValidationException) return Failure(error);
     return Failure(
       DatabaseException(
         fallbackMessage,

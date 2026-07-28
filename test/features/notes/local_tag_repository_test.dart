@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
 import 'package:ruoke/src/features/notes/repository/local_tag_repository.dart';
 
 void main() {
@@ -133,6 +134,106 @@ void main() {
     final tags = _successValue(await repository.listTags());
 
     expect(tags.single.noteCount, 1);
+  });
+
+  test('标签名称支持部分匹配和完全匹配', () async {
+    await repository.createTag(name: '复习');
+    await repository.createTag(name: '期末复习');
+    await repository.createTag(name: '错题');
+
+    final contains = _successValue(
+      await repository.searchTags(
+        keyword: '  复  ',
+        matchMode: SearchMatchMode.contains,
+      ),
+    );
+    final exact = _successValue(
+      await repository.searchTags(
+        keyword: '  复习  ',
+        matchMode: SearchMatchMode.exact,
+      ),
+    );
+
+    expect(contains.map((tag) => tag.name).toSet(), {'复习', '期末复习'});
+    expect(exact.map((tag) => tag.name), ['复习']);
+  });
+
+  test('按名称添加会复用已有标签并避免重复关联', () async {
+    final existing = _successValue(await repository.createTag(name: '重点'));
+    final noteId = await _insertNote(db, 'reuse-note');
+
+    final first = _successValue(
+      await repository.findOrCreateAndAttachTag(
+        noteId: noteId,
+        tagName: '  重点  ',
+      ),
+    );
+    final second = _successValue(
+      await repository.findOrCreateAndAttachTag(
+        noteId: noteId,
+        tagName: '重点',
+      ),
+    );
+
+    expect(first.id, existing.id);
+    expect(second.id, existing.id);
+    expect(_successValue(await repository.listTags()), hasLength(1));
+    expect(await db.noteTagDao.listByNote(noteId), hasLength(1));
+  });
+
+  test('按名称添加不存在的标签会创建并绑定', () async {
+    final noteId = await _insertNote(db, 'create-and-attach-note');
+
+    final tag = _successValue(
+      await repository.findOrCreateAndAttachTag(
+        noteId: noteId,
+        tagName: '  新标签  ',
+      ),
+    );
+
+    expect(tag.name, '新标签');
+    expect(
+      (await db.noteTagDao.listByNote(noteId)).single.tagId,
+      tag.id,
+    );
+  });
+
+  test('批量按名称绑定会修剪名称并去重', () async {
+    final noteId = await _insertNote(db, 'batch-note');
+
+    final tags = _successValue(
+      await repository.attachTagsByNames(
+        noteId: noteId,
+        names: [' 重点 ', '重点', ' 待复习 '],
+      ),
+    );
+
+    expect(tags.map((tag) => tag.name).toSet(), {'重点', '待复习'});
+    expect(await db.noteTagDao.listByNote(noteId), hasLength(2));
+    expect(_successValue(await repository.listTags()), hasLength(2));
+  });
+
+  test('按名称绑定空标签返回校验错误且不写数据', () async {
+    final noteId = await _insertNote(db, 'blank-tag-note');
+
+    final result = await repository.findOrCreateAndAttachTag(
+      noteId: noteId,
+      tagName: '   ',
+    );
+
+    expect(_failureValue(result), isA<ValidationException>());
+    expect(_successValue(await repository.listTags()), isEmpty);
+    expect(await db.noteTagDao.listByNote(noteId), isEmpty);
+  });
+
+  test('笔记不存在时按名称绑定失败且事务不留下孤立标签', () async {
+    final result = await repository.attachTagsByNames(
+      noteId: 'missing-note',
+      names: ['不应保留'],
+    );
+
+    expect(_failureValue(result), isA<ValidationException>());
+    expect(_successValue(await repository.listTags()), isEmpty);
   });
 }
 

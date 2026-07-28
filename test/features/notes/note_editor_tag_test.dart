@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
 import 'package:ruoke/src/features/notes/models/tag.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
@@ -373,6 +374,24 @@ class _FakeTagRepository implements TagRepository {
     ];
     return const Success<void>(null);
   }
+
+  @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<Tag>> createTag({required String name, String? color}) =>

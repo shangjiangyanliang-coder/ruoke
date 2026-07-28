@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
 import 'package:ruoke/src/features/notes/models/tag.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/tag_repository.dart';
@@ -164,6 +165,19 @@ class _FakeTagRepository implements TagRepository {
   }
 
   @override
+  Future<Result<List<Tag>>> searchTags({
+    required String keyword,
+    required SearchMatchMode matchMode,
+  }) async => Success(
+    allTags.where((tag) {
+      return switch (matchMode) {
+        SearchMatchMode.contains => tag.name.contains(keyword.trim()),
+        SearchMatchMode.exact => tag.name == keyword.trim(),
+      };
+    }).toList(),
+  );
+
+  @override
   Future<Result<Tag>> createTag({required String name, String? color}) async {
     if (failCreate) {
       return const Failure(DatabaseException('模拟新建失败'));
@@ -213,6 +227,18 @@ class _FakeTagRepository implements TagRepository {
     ];
     return const Success<void>(null);
   }
+
+  @override
+  Future<Result<Tag>> findOrCreateAndAttachTag({
+    required String noteId,
+    required String tagName,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<List<Tag>>> attachTagsByNames({
+    required String noteId,
+    required Iterable<String> names,
+  }) => throw UnimplementedError();
 }
 
 Tag _tag(String id, String name) =>

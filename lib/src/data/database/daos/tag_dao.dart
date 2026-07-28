@@ -8,6 +8,9 @@ import '../tables/tag_table.dart';
 
 part 'tag_dao.g.dart';
 
+/// DAO 内部标签名称匹配方式，避免数据层依赖 feature 模型。
+enum TagDaoMatchMode { contains, exact }
+
 /// 标签 DAO。
 @DriftAccessor(tables: [Tags])
 class TagDao extends DatabaseAccessor<AppDatabase> with _$TagDaoMixin {
@@ -19,6 +22,22 @@ class TagDao extends DatabaseAccessor<AppDatabase> with _$TagDaoMixin {
   /// 列出全部标签。
   Future<List<TagEntity>> listAll() {
     return (select(tags)..orderBy([(t) => OrderingTerm.asc(t.name)])).get();
+  }
+
+  /// 按标签名称查询并按名称升序。
+  Future<List<TagEntity>> searchByName(
+    String keyword,
+    TagDaoMatchMode matchMode,
+  ) {
+    final query = select(tags)
+      ..where(
+        (tag) => switch (matchMode) {
+          TagDaoMatchMode.contains => tag.name.like('%$keyword%'),
+          TagDaoMatchMode.exact => tag.name.equals(keyword),
+        },
+      )
+      ..orderBy([(tag) => OrderingTerm.asc(tag.name)]);
+    return query.get();
   }
 
   /// 按名字取标签（查重/反查用）。
