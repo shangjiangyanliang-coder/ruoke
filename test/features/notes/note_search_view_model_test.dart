@@ -9,6 +9,8 @@ import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
 import 'package:ruoke/src/features/notes/models/note_version.dart';
+import 'package:ruoke/src/features/notes/models/search_match_mode.dart';
+import 'package:ruoke/src/features/notes/models/subject_scope.dart';
 import 'package:ruoke/src/features/notes/providers.dart';
 import 'package:ruoke/src/features/notes/repository/note_repository.dart';
 import 'package:ruoke/src/features/notes/view_model/view_model_providers.dart';
@@ -20,6 +22,8 @@ void main() {
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
     addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
     final notifier = container.read(noteSearchVmProvider.notifier);
     await container.read(noteSearchVmProvider.future);
 
@@ -39,6 +43,8 @@ void main() {
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
     addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
     final notifier = container.read(noteSearchVmProvider.notifier);
     await container.read(noteSearchVmProvider.future);
     await notifier.setKeyword('正文');
@@ -60,6 +66,8 @@ void main() {
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
     addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
     final notifier = container.read(noteSearchVmProvider.notifier);
     await container.read(noteSearchVmProvider.future);
 
@@ -81,6 +89,8 @@ void main() {
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
     addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
     final notifier = container.read(noteSearchVmProvider.notifier);
     await Future<void>.delayed(Duration.zero);
 
@@ -124,6 +134,61 @@ void main() {
       ),
     );
     expect(container.read(noteSearchVmProvider).hasError, isTrue);
+  });
+
+  test('切换匹配模式和科目范围会保留其他条件并刷新', () async {
+    final repository = _FakeNoteRepository();
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(noteSearchVmProvider, (_, _) {});
+    addTearDown(subscription.close);
+    final notifier = container.read(noteSearchVmProvider.notifier);
+    await container.read(noteSearchVmProvider.future);
+    await notifier.setKeyword('代数');
+    await notifier.setTagIds({'tag-1'});
+
+    await notifier.setKeywordMatchMode(SearchMatchMode.exact);
+    await notifier.setSubjectScope(const SubjectScope.level(1));
+
+    final query = container.read(noteSearchVmProvider).value!.query;
+    expect(query.keyword, '代数');
+    expect(query.tagIds, {'tag-1'});
+    expect(query.keywordMatchMode, SearchMatchMode.exact);
+    expect(query.subjectScope, const SubjectScope.level(1));
+    expect(repository.queries.last.subjectScope, const SubjectScope.level(1));
+  });
+
+  test('搜索 Provider 销毁后重新进入恢复默认条件', () async {
+    final repository = _FakeNoteRepository();
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final firstSubscription = container.listen(
+      noteSearchVmProvider,
+      (_, _) {},
+    );
+    await container.read(noteSearchVmProvider.future);
+    await container
+        .read(noteSearchVmProvider.notifier)
+        .setKeyword('不应保留');
+    firstSubscription.close();
+    await container.pump();
+
+    final secondSubscription = container.listen(
+      noteSearchVmProvider,
+      (_, _) {},
+    );
+    addTearDown(secondSubscription.close);
+    final reopened = await container.read(noteSearchVmProvider.future);
+
+    expect(reopened.query.keyword, isEmpty);
+    expect(reopened.query.tagIds, isEmpty);
+    expect(reopened.query.keywordMatchMode, SearchMatchMode.contains);
+    expect(reopened.query.subjectScope, const SubjectScope.all());
+    expect(reopened.query.sortOrder, NoteSortOrder.updatedDesc);
   });
 }
 

@@ -13,6 +13,7 @@ import 'note_version_view_model.dart';
 import 'subject_manage_view_model.dart';
 import 'subject_tree_view_model.dart';
 import 'tag_management_view_model.dart';
+import 'tag_search_view_model.dart';
 
 /// 笔记列表 ViewModel Provider（保留，第3批 UI 改用 B1 树，此 Provider 暂备用）。
 final noteListVmProvider = AsyncNotifierProvider<NoteListVm, List<Note>>(
@@ -53,4 +54,14 @@ final noteTagsVmProvider = AsyncNotifierProvider.autoDispose
 
 /// 笔记搜索条件与结果 ViewModel Provider。
 final noteSearchVmProvider =
-    AsyncNotifierProvider<NoteSearchVm, NoteSearchState>(NoteSearchVm.new);
+    AsyncNotifierProvider.autoDispose<NoteSearchVm, NoteSearchState>(
+      NoteSearchVm.new,
+      retry: (_, _) => null,
+    );
+
+/// 标签搜索页面会话；退出页面后销毁全部搜索条件。
+final tagSearchVmProvider =
+    AsyncNotifierProvider.autoDispose<TagSearchVm, TagSearchState>(
+      TagSearchVm.new,
+      retry: (_, _) => null,
+    );

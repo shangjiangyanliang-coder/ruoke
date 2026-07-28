@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/errors/result.dart';
 import '../models/note.dart';
 import '../models/note_search_query.dart';
+import '../models/search_match_mode.dart';
+import '../models/subject_scope.dart';
 import '../providers.dart';
 
 /// 搜索页状态。
@@ -40,6 +42,12 @@ class NoteSearchVm extends AsyncNotifier<NoteSearchState> {
   Future<void> setTagIds(Set<String> tagIds) =>
       _refresh(_copyQuery(tagIds: Set.unmodifiable(tagIds)));
 
+  Future<void> setKeywordMatchMode(SearchMatchMode keywordMatchMode) =>
+      _refresh(_copyQuery(keywordMatchMode: keywordMatchMode));
+
+  Future<void> setSubjectScope(SubjectScope subjectScope) =>
+      _refresh(_copyQuery(subjectScope: subjectScope));
+
   Future<void> setSortOrder(NoteSortOrder sortOrder) =>
       _refresh(_copyQuery(sortOrder: sortOrder));
 
@@ -47,12 +55,17 @@ class NoteSearchVm extends AsyncNotifier<NoteSearchState> {
 
   NoteSearchQuery _copyQuery({
     String? keyword,
+    SearchMatchMode? keywordMatchMode,
     Set<String>? tagIds,
+    SubjectScope? subjectScope,
     NoteSortOrder? sortOrder,
   }) {
     return NoteSearchQuery(
       keyword: keyword ?? _currentQuery.keyword,
+      keywordMatchMode:
+          keywordMatchMode ?? _currentQuery.keywordMatchMode,
       tagIds: tagIds ?? _currentQuery.tagIds,
+      subjectScope: subjectScope ?? _currentQuery.subjectScope,
       sortOrder: sortOrder ?? _currentQuery.sortOrder,
     );
   }
