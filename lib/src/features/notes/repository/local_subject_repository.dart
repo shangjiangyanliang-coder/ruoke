@@ -13,6 +13,7 @@ import '../../../data/errors/result.dart';
 import '../../../utils/id_generator.dart';
 import '../../../utils/time_utils.dart';
 import '../models/subject.dart';
+import '../models/subject_path.dart';
 import 'subject_repository.dart';
 
 /// SubjectRepository 的本地（Drift）实现。
@@ -25,30 +26,65 @@ class LocalSubjectRepository implements SubjectRepository {
 
   @override
   Future<Result<List<Subject>>> listAll() => guard(
-        () async =>
-            (await _dao.listAll()).map(Subject.fromEntity).toList(),
-        orElse: (e) =>
-            const Failure(DatabaseException('读取科目树失败', techDetail: 'listAll')),
-      );
+    () async => (await _dao.listAll()).map(Subject.fromEntity).toList(),
+    orElse: (e) =>
+        const Failure(DatabaseException('读取科目树失败', techDetail: 'listAll')),
+  );
 
   @override
   Future<Result<List<Subject>>> childrenOf(String? parentId) => guard(
-        () async => (await _dao.childrenOf(parentId))
-            .map(Subject.fromEntity)
-            .toList(),
-        orElse: (e) => const Failure(
-            DatabaseException('读取子科目失败', techDetail: 'childrenOf')),
-      );
+    () async =>
+        (await _dao.childrenOf(parentId)).map(Subject.fromEntity).toList(),
+    orElse: (e) =>
+        const Failure(DatabaseException('读取子科目失败', techDetail: 'childrenOf')),
+  );
+
+  @override
+  Future<Result<List<SubjectPath>>> searchPaths(String keyword) {
+    final normalized = keyword.trim();
+    if (normalized.isEmpty) {
+      return Future.value(const Success<List<SubjectPath>>([]));
+    }
+    return guard(
+      () async {
+        final matches = await _dao.searchByName(normalized);
+        final paths = <SubjectPath>[];
+        for (final entity in matches) {
+          final path = await _buildPath(Subject.fromEntity(entity));
+          if (path != null) paths.add(path);
+        }
+        return paths;
+      },
+      orElse: (e) =>
+          const Failure(DatabaseException('搜索科目失败', techDetail: 'searchPaths')),
+    );
+  }
+
+  /// 最多向上读取两级；层级、父子关系或软删除状态异常时丢弃该路径。
+  Future<SubjectPath?> _buildPath(Subject target) async {
+    final reversed = <Subject>[target];
+    var current = target;
+    while (current.parentId != null && reversed.length < 3) {
+      final parentEntity = await _dao.getById(current.parentId!);
+      if (parentEntity == null || parentEntity.isDeleted) return null;
+      final parent = Subject.fromEntity(parentEntity);
+      if (parent.level != current.level - 1) return null;
+      reversed.add(parent);
+      current = parent;
+    }
+    if (current.parentId != null || current.level != 0) return null;
+    return SubjectPath(reversed.reversed);
+  }
 
   @override
   Future<Result<Subject?>> getById(String id) => guard(
-        () async {
-          final e = await _dao.getById(id);
-          return e == null ? null : Subject.fromEntity(e);
-        },
-        orElse: (e) =>
-            const Failure(DatabaseException('读取科目失败', techDetail: 'getById')),
-      );
+    () async {
+      final e = await _dao.getById(id);
+      return e == null ? null : Subject.fromEntity(e);
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('读取科目失败', techDetail: 'getById')),
+  );
 
   @override
   Future<Result<String>> create({
@@ -56,46 +92,46 @@ class LocalSubjectRepository implements SubjectRepository {
     required int level,
     String? parentId,
     int sortOrder = 0,
-  }) =>
-      guard(
-        () async {
-          final now = nowMs();
-          final id = newId();
-          await _dao.insertSubject(
-            SubjectsCompanion(
-              id: Value(id),
-              parentId: Value(parentId),
-              name: Value(name),
-              level: Value(level),
-              sortOrder: Value(sortOrder),
-              createdAt: Value(now),
-              updatedAt: Value(now),
-            ),
-          );
-          return id;
-        },
-        orElse: (e) =>
-            const Failure(DatabaseException('新建科目失败', techDetail: 'create')),
+  }) => guard(
+    () async {
+      final now = nowMs();
+      final id = newId();
+      await _dao.insertSubject(
+        SubjectsCompanion(
+          id: Value(id),
+          parentId: Value(parentId),
+          name: Value(name),
+          level: Value(level),
+          sortOrder: Value(sortOrder),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ),
       );
+      return id;
+    },
+    orElse: (e) =>
+        const Failure(DatabaseException('新建科目失败', techDetail: 'create')),
+  );
 
   @override
   Future<Result<void>> softDelete(String id) => guard(
-        () async => _dao.softDelete(id, nowMs()),
-        orElse: (e) =>
-            const Failure(DatabaseException('删除科目失败', techDetail: 'softDelete')),
-      );
+    () async => _dao.softDelete(id, nowMs()),
+    orElse: (e) =>
+        const Failure(DatabaseException('删除科目失败', techDetail: 'softDelete')),
+  );
 
   @override
   Future<Result<int>> countChildren(String? parentId) => guard(
-        () async => _dao.countChildren(parentId),
-        orElse: (e) => const Failure(
-            DatabaseException('统计子科目失败', techDetail: 'countChildren')),
-      );
+    () async => _dao.countChildren(parentId),
+    orElse: (e) => const Failure(
+      DatabaseException('统计子科目失败', techDetail: 'countChildren'),
+    ),
+  );
 
   @override
   Future<Result<bool>> isEmpty() => guard(
-        () async => (await _dao.totalCount()) == 0,
-        orElse: (e) =>
-            const Failure(DatabaseException('判空科目表失败', techDetail: 'isEmpty')),
-      );
+    () async => (await _dao.totalCount()) == 0,
+    orElse: (e) =>
+        const Failure(DatabaseException('判空科目表失败', techDetail: 'isEmpty')),
+  );
 }

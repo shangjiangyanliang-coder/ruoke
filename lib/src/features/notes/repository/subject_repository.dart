@@ -5,6 +5,7 @@
 //       详见技术方案 A §2.2/§6.2 + B §二 表1。
 import '../../../data/errors/result.dart';
 import '../models/subject.dart';
+import '../models/subject_path.dart';
 
 /// 科目树 Repository 接口。
 abstract class SubjectRepository {
@@ -13,6 +14,9 @@ abstract class SubjectRepository {
 
   /// 按 parentId 取直接子节点（构造树/级联选用）。
   Future<Result<List<Subject>>> childrenOf(String? parentId);
+
+  /// 按名称部分匹配，并返回每个命中节点从书开始的完整路径。
+  Future<Result<List<SubjectPath>>> searchPaths(String keyword);
 
   /// 按 id 取一条。
   Future<Result<Subject?>> getById(String id);

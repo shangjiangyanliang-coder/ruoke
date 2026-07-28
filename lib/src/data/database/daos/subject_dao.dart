@@ -43,6 +43,30 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
     return query.get();
   }
 
+  /// 按名称部分匹配未软删除节点，LIKE 特殊字符按普通字符处理。
+  Future<List<SubjectEntity>> searchByName(String keyword) {
+    final query = select(subjects)
+      ..where(
+        (subject) =>
+            subject.isDeleted.equals(false) &
+            subject.name.like(
+              '%${_escapeLikePattern(keyword)}%',
+              escapeChar: r'\',
+            ),
+      )
+      ..orderBy([
+        (subject) => OrderingTerm.asc(subject.name),
+        (subject) => OrderingTerm.asc(subject.level),
+        (subject) => OrderingTerm.asc(subject.sortOrder),
+      ]);
+    return query.get();
+  }
+
+  String _escapeLikePattern(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
+
   /// 按 id 取一条（含软删，交由 Repository 决定是否过滤）。
   Future<SubjectEntity?> getById(String id) {
     return (select(subjects)..where((s) => s.id.equals(id))).getSingleOrNull();
