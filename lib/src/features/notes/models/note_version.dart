@@ -10,6 +10,7 @@ class NoteVersion {
   final int versionNo;
   final String snapshotJson;
   final int createdAt;
+  final String? name;
 
   const NoteVersion({
     required this.id,
@@ -17,13 +18,19 @@ class NoteVersion {
     required this.versionNo,
     required this.snapshotJson,
     required this.createdAt,
+    this.name,
   });
 
+  /// 供版本列表使用：未命名的版本回退到稳定的版本号名称。
+  String get displayName =>
+      name == null || name!.isEmpty ? '版本 $versionNo' : name!;
+
   factory NoteVersion.fromEntity(NoteVersionEntity e) => NoteVersion(
-        id: e.id,
-        noteId: e.noteId,
-        versionNo: e.versionNo,
-        snapshotJson: e.snapshotJson,
-        createdAt: e.createdAt,
-      );
+    id: e.id,
+    noteId: e.noteId,
+    versionNo: e.versionNo,
+    snapshotJson: e.snapshotJson,
+    createdAt: e.createdAt,
+    name: e.name,
+  );
 }

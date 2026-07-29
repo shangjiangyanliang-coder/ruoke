@@ -371,6 +371,127 @@ void main() {
     expect(versions.map((item) => item.versionNo), [2, 1]);
     expect(versions.map((item) => item.versionNo).toSet(), hasLength(2));
   });
+
+  test('历史版本 DAO 可按 ID 读取完整版本行', () async {
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-by-id'),
+        noteId: Value('note-by-id'),
+        versionNo: Value(4),
+        snapshotJson: Value('[]'),
+        createdAt: Value(40),
+        name: Value('复习前'),
+      ),
+    );
+
+    final version = await db.noteVersionDao.getById('version-by-id');
+
+    expect(version?.noteId, 'note-by-id');
+    expect(version?.versionNo, 4);
+    expect(version?.name, '复习前');
+  });
+
+  test('历史版本 DAO 按名称查询时可排除当前版本', () async {
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-name-a'),
+        noteId: Value('note-by-name'),
+        versionNo: Value(1),
+        snapshotJson: Value('[]'),
+        createdAt: Value(1),
+        name: Value('阶段总结'),
+      ),
+    );
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-name-b'),
+        noteId: Value('note-by-name'),
+        versionNo: Value(2),
+        snapshotJson: Value('[]'),
+        createdAt: Value(2),
+        name: Value('阶段总结'),
+      ),
+    );
+
+    final conflict = await db.noteVersionDao.getByName(
+      noteId: 'note-by-name',
+      name: '阶段总结',
+      excludingVersionId: 'version-name-a',
+    );
+
+    expect(conflict?.id, 'version-name-b');
+  });
+
+  test('历史版本 DAO 可将自定义名称清空为 null', () async {
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-clear-name'),
+        noteId: Value('note-clear-name'),
+        versionNo: Value(1),
+        snapshotJson: Value('[]'),
+        createdAt: Value(1),
+        name: Value('临时名称'),
+      ),
+    );
+
+    final changed = await db.noteVersionDao.renameVersion(
+      'version-clear-name',
+      null,
+    );
+
+    expect(changed, 1);
+    expect(
+      (await db.noteVersionDao.getById('version-clear-name'))?.name,
+      isNull,
+    );
+  });
+
+  test('历史版本 DAO 按 ID 集合只返回实际存在的版本', () async {
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-selected'),
+        noteId: Value('note-selected'),
+        versionNo: Value(1),
+        snapshotJson: Value('[]'),
+        createdAt: Value(1),
+      ),
+    );
+
+    final versions = await db.noteVersionDao.listByIds({
+      'version-selected',
+      'already-missing',
+    });
+
+    expect(versions.map((item) => item.id), ['version-selected']);
+  });
+
+  test('历史版本 DAO 批量删除不重排保留版本号', () async {
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-delete-1'),
+        noteId: Value('note-delete'),
+        versionNo: Value(1),
+        snapshotJson: Value('[]'),
+        createdAt: Value(1),
+      ),
+    );
+    await db.noteVersionDao.insertVersion(
+      const NoteVersionsCompanion(
+        id: Value('version-delete-3'),
+        noteId: Value('note-delete'),
+        versionNo: Value(3),
+        snapshotJson: Value('[]'),
+        createdAt: Value(3),
+      ),
+    );
+
+    final deleted = await db.noteVersionDao.deleteByIds({'version-delete-1'});
+    final remaining = await db.noteVersionDao.listByNote('note-delete');
+
+    expect(deleted, 1);
+    expect(remaining.single.id, 'version-delete-3');
+    expect(remaining.single.versionNo, 3);
+  });
 }
 
 String _delta(List<Map<String, Object>> operations) => jsonEncode(operations);
