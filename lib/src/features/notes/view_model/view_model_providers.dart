@@ -5,7 +5,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/note.dart';
-import '../models/note_version.dart';
 import 'note_editor_view_model.dart';
 import 'note_list_view_model.dart';
 import 'note_search_view_model.dart';
@@ -27,7 +26,7 @@ final noteEditorVmProvider =
 
 /// 单条笔记历史版本 ViewModel Provider；按 noteId 隔离并随页面销毁。
 final noteVersionVmProvider = AsyncNotifierProvider.autoDispose
-    .family<NoteVersionVm, List<NoteVersion>, String>(NoteVersionVm.new);
+    .family<NoteVersionVm, NoteVersionState, String>(NoteVersionVm.new);
 
 /// B1 笔记分级树 ViewModel Provider（书-章-节-笔记嵌套树 + 未分类组）。
 final subjectTreeVmProvider =
