@@ -154,36 +154,72 @@ class _NoteVersionListViewState extends ConsumerState<NoteVersionListView> {
 
   Future<void> _rename(NoteVersion version) async {
     final controller = TextEditingController(text: version.name ?? '');
-    final name = await showDialog<String>(
+    await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('重命名历史版本'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 50,
-          decoration: const InputDecoration(hintText: '留空则恢复默认版本名称'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
+      builder: (dialogContext) {
+        var saving = false;
+        String? errorMessage;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('重命名历史版本'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLength: 50,
+                  decoration: const InputDecoration(hintText: '留空则恢复默认版本名称'),
+                ),
+                if (errorMessage != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          saving = true;
+                          errorMessage = null;
+                        });
+                        final ok = await ref
+                            .read(noteVersionVmProvider(widget.noteId).notifier)
+                            .rename(
+                              versionId: version.id,
+                              name: controller.text,
+                            );
+                        if (!dialogContext.mounted) return;
+                        if (ok) {
+                          Navigator.pop(dialogContext);
+                        } else {
+                          setDialogState(() {
+                            saving = false;
+                            errorMessage = _operationErrorMessage();
+                          });
+                        }
+                      },
+                child: const Text('保存'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+        );
+      },
     );
     controller.dispose();
-    if (name == null || !mounted) return;
-
-    final ok = await ref
-        .read(noteVersionVmProvider(widget.noteId).notifier)
-        .rename(versionId: version.id, name: name);
-    if (!mounted) return;
-    if (!ok || _hasOperationError()) _showOperationError();
   }
 
   Future<void> _deleteSelected() async {
@@ -258,13 +294,7 @@ class _NoteVersionListViewState extends ConsumerState<NoteVersionListView> {
   }
 
   void _showOperationError() {
-    final message =
-        ref
-            .read(noteVersionVmProvider(widget.noteId))
-            .value
-            ?.operationError
-            ?.userMessage ??
-        '操作失败，请稍后重试';
+    final message = _operationErrorMessage();
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -273,6 +303,14 @@ class _NoteVersionListViewState extends ConsumerState<NoteVersionListView> {
   bool _hasOperationError() =>
       ref.read(noteVersionVmProvider(widget.noteId)).value?.operationError !=
       null;
+
+  String _operationErrorMessage() =>
+      ref
+          .read(noteVersionVmProvider(widget.noteId))
+          .value
+          ?.operationError
+          ?.userMessage ??
+      '操作失败，请稍后重试';
 
   String _formatCreatedAt(NoteVersion version) {
     final date = DateTime.fromMillisecondsSinceEpoch(

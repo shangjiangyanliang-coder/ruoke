@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note.dart';
 import 'package:ruoke/src/features/notes/models/note_search_query.dart';
@@ -39,14 +40,30 @@ void main() {
     expect(checkbox.value, isFalse);
     expect(find.text('恢复前将当前内容保存为新版本'), findsOneWidget);
   });
+
+  testWidgets('重命名校验失败时保留对话框并显示错误', (tester) async {
+    await tester.pumpWidget(_app(_FakeRepository()..failRename = true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重命名历史版本'), findsOneWidget);
+    expect(find.text('版本名称已存在'), findsOneWidget);
+  });
 }
 
-Widget _app() => ProviderScope(
-  overrides: [noteRepositoryProvider.overrideWithValue(_FakeRepository())],
+Widget _app([_FakeRepository? repository]) => ProviderScope(
+  overrides: [
+    noteRepositoryProvider.overrideWithValue(repository ?? _FakeRepository()),
+  ],
   child: const MaterialApp(home: NoteVersionListView(noteId: 'note-1')),
 );
 
 class _FakeRepository implements NoteRepository {
+  bool failRename = false;
   final versions = [
     const NoteVersion(
       id: 'version-1',
@@ -67,7 +84,9 @@ class _FakeRepository implements NoteRepository {
     required String noteId,
     required String versionId,
     required String? name,
-  }) async => const Success<void>(null);
+  }) async => failRename
+      ? const Failure(DatabaseException('版本名称已存在'))
+      : const Success<void>(null);
 
   @override
   Future<Result<void>> deleteVersions({
