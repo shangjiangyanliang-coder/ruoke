@@ -7,6 +7,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ruoke/src/data/database/app_database.dart';
+import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
 import 'package:ruoke/src/features/notes/models/note_edit_snapshot.dart';
 import 'package:ruoke/src/features/notes/repository/local_note_repository.dart';
@@ -491,6 +492,143 @@ void main() {
     expect(deleted, 1);
     expect(remaining.single.id, 'version-delete-3');
     expect(remaining.single.versionNo, 3);
+  });
+
+  test('重命名历史版本会修剪名称并持久化', () async {
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('旧正文')]),
+      ),
+    ).id;
+    await repository.update(id: noteId, contentJson: _delta([_op('新正文')]));
+    final version = _successValue(await repository.listVersions(noteId)).single;
+
+    final result = await repository.renameVersion(
+      noteId: noteId,
+      versionId: version.id,
+      name: '  考前复习  ',
+    );
+
+    expect(result, isA<Success<void>>());
+    expect(
+      _successValue(await repository.listVersions(noteId)).single.name,
+      '考前复习',
+    );
+
+    final cleared = await repository.renameVersion(
+      noteId: noteId,
+      versionId: version.id,
+      name: '   ',
+    );
+
+    expect(cleared, isA<Success<void>>());
+    expect(
+      _successValue(await repository.listVersions(noteId)).single.name,
+      isNull,
+    );
+  });
+
+  test('批量删除历史版本会忽略已不存在 ID 且不重排版本号', () async {
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('第一版')]),
+      ),
+    ).id;
+    await repository.update(id: noteId, contentJson: _delta([_op('第二版')]));
+    await repository.update(id: noteId, contentJson: _delta([_op('第三版')]));
+    final versionsBefore = _successValue(await repository.listVersions(noteId));
+    final firstVersion = versionsBefore.singleWhere(
+      (version) => version.versionNo == 1,
+    );
+
+    final result = await repository.deleteVersions(
+      noteId: noteId,
+      versionIds: {firstVersion.id, 'already-missing'},
+    );
+
+    expect(result, isA<Success<void>>());
+    final remaining = _successValue(await repository.listVersions(noteId));
+    expect(remaining.map((version) => version.versionNo), [2]);
+  });
+
+  test('同一笔记的历史版本不能使用重复自定义名称', () async {
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('第一版')]),
+      ),
+    ).id;
+    await repository.update(id: noteId, contentJson: _delta([_op('第二版')]));
+    await repository.update(id: noteId, contentJson: _delta([_op('第三版')]));
+    final versions = _successValue(await repository.listVersions(noteId));
+
+    await repository.renameVersion(
+      noteId: noteId,
+      versionId: versions.first.id,
+      name: '阶段总结',
+    );
+    final result = await repository.renameVersion(
+      noteId: noteId,
+      versionId: versions.last.id,
+      name: '阶段总结',
+    );
+
+    expect(result, isA<Failure<void>>());
+    expect((result as Failure<void>).exception, isA<ValidationException>());
+  });
+
+  test('历史版本自定义名称超过50个字符会失败', () async {
+    final noteId = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('旧正文')]),
+      ),
+    ).id;
+    await repository.update(id: noteId, contentJson: _delta([_op('新正文')]));
+    final version = _successValue(await repository.listVersions(noteId)).single;
+
+    final result = await repository.renameVersion(
+      noteId: noteId,
+      versionId: version.id,
+      name: List.filled(51, '字').join(),
+    );
+
+    expect(result, isA<Failure<void>>());
+    expect((result as Failure<void>).exception, isA<ValidationException>());
+  });
+
+  test('批量删除混入另一笔记版本时会整体失败且不删除本笔记版本', () async {
+    final noteA = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('A1')]),
+      ),
+    ).id;
+    final noteB = _successValue(
+      await repository.create(
+        subjectId: 'uncategorized',
+        contentJson: _delta([_op('B1')]),
+      ),
+    ).id;
+    await repository.update(id: noteA, contentJson: _delta([_op('A2')]));
+    await repository.update(id: noteB, contentJson: _delta([_op('B2')]));
+    final versionA = _successValue(await repository.listVersions(noteA)).single;
+    final versionB = _successValue(await repository.listVersions(noteB)).single;
+
+    final result = await repository.deleteVersions(
+      noteId: noteA,
+      versionIds: {versionA.id, versionB.id},
+    );
+
+    expect(result, isA<Failure<void>>());
+    expect(
+      _successValue(
+        await repository.listVersions(noteA),
+      ).map((version) => version.id),
+      [versionA.id],
+    );
   });
 }
 

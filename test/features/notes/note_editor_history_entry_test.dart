@@ -355,6 +355,19 @@ class _FakeNoteRepository implements NoteRepository {
       const Success([]);
 
   @override
+  Future<Result<void>> renameVersion({
+    required String noteId,
+    required String versionId,
+    required String? name,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteVersions({
+    required String noteId,
+    required Set<String> versionIds,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
@@ -370,24 +383,16 @@ class _FakeTagRepository implements TagRepository {
   _FakeTagRepository([this.names = const []]);
 
   @override
-  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success(
-    [
-      for (var index = 0; index < names.length; index++)
-        Tag(
-          id: 'tag-$index',
-          name: names[index],
-          color: null,
-          createdAt: 1,
-        ),
-    ],
-  );
+  Future<Result<List<Tag>>> listTagsForNote(String noteId) async => Success([
+    for (var index = 0; index < names.length; index++)
+      Tag(id: 'tag-$index', name: names[index], color: null, createdAt: 1),
+  ]);
 
   @override
   Future<Result<List<Tag>>> attachTagsByNames({
     required String noteId,
     required Iterable<String> names,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<Tag>> createTag({required String name, String? color}) =>
@@ -400,8 +405,7 @@ class _FakeTagRepository implements TagRepository {
   Future<Result<Tag>> findOrCreateAndAttachTag({
     required String noteId,
     required String tagName,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<TagWithCount>>> listTags() async => const Success([]);
@@ -414,15 +418,13 @@ class _FakeTagRepository implements TagRepository {
   Future<Result<void>> replaceNoteTags({
     required String noteId,
     required List<String> tagIds,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<Tag>>> searchTags({
     required String keyword,
     required SearchMatchMode matchMode,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 Note _note({String? id, String? title, String? contentJson}) => Note(

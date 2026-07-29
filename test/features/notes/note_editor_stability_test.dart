@@ -455,8 +455,7 @@ class _EmptyTagRepository implements TagRepository {
   Future<Result<List<Tag>>> attachTagsByNames({
     required String noteId,
     required Iterable<String> names,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<Tag>> createTag({required String name, String? color}) =>
@@ -469,8 +468,7 @@ class _EmptyTagRepository implements TagRepository {
   Future<Result<Tag>> findOrCreateAndAttachTag({
     required String noteId,
     required String tagName,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<TagWithCount>>> listTags() async => const Success([]);
@@ -483,15 +481,13 @@ class _EmptyTagRepository implements TagRepository {
   Future<Result<void>> replaceNoteTags({
     required String noteId,
     required List<String> tagIds,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<List<Tag>>> searchTags({
     required String keyword,
     required SearchMatchMode matchMode,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 class _StabilityRepository implements NoteRepository {
@@ -569,6 +565,19 @@ class _StabilityRepository implements NoteRepository {
   @override
   Future<Result<List<NoteVersion>>> listVersions(String noteId) async =>
       const Success([]);
+
+  @override
+  Future<Result<void>> renameVersion({
+    required String noteId,
+    required String versionId,
+    required String? name,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteVersions({
+    required String noteId,
+    required Set<String> versionIds,
+  }) => throw UnimplementedError();
 
   @override
   Future<Result<void>> restoreVersion({

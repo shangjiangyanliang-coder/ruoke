@@ -298,6 +298,19 @@ class _FakeNoteRepository implements NoteRepository {
       throw UnimplementedError();
 
   @override
+  Future<Result<void>> renameVersion({
+    required String noteId,
+    required String versionId,
+    required String? name,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> deleteVersions({
+    required String noteId,
+    required Set<String> versionIds,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,

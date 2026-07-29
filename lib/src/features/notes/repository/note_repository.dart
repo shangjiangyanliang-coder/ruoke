@@ -46,6 +46,19 @@ abstract class NoteRepository {
   /// 列出某笔记历史版本（第4批用，第2批先备好口子）。
   Future<Result<List<NoteVersion>>> listVersions(String noteId);
 
+  /// 设置或清除历史版本的自定义名称。
+  Future<Result<void>> renameVersion({
+    required String noteId,
+    required String versionId,
+    required String? name,
+  });
+
+  /// 永久删除某笔记选中的历史版本。
+  Future<Result<void>> deleteVersions({
+    required String noteId,
+    required Set<String> versionIds,
+  });
+
   /// 将某个历史版本恢复为当前正文，并保留恢复前的正文快照。
   Future<Result<void>> restoreVersion({
     required String noteId,

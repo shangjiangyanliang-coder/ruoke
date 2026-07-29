@@ -304,6 +304,76 @@ class LocalNoteRepository implements NoteRepository {
     ),
   );
 
+  @override
+  Future<Result<void>> deleteVersions({
+    required String noteId,
+    required Set<String> versionIds,
+  }) => guard(
+    () async {
+      if (versionIds.isEmpty) return;
+      // 先全量校验再删除，避免跨笔记 ID 导致部分版本已被误删。
+      await _db.transaction(() async {
+        final versions = await _versionDao.listByIds(versionIds);
+        if (versions.any((version) => version.noteId != noteId)) {
+          throw const ValidationException('历史版本不属于当前笔记');
+        }
+        await _versionDao.deleteByIds(
+          versions.map((version) => version.id).toSet(),
+        );
+      });
+    },
+    orElse: (e) => e is ValidationException
+        ? Failure(e)
+        : const Failure(
+            DatabaseException('删除历史版本失败', techDetail: 'deleteVersions'),
+          ),
+  );
+
+  @override
+  Future<Result<void>> renameVersion({
+    required String noteId,
+    required String versionId,
+    required String? name,
+  }) => guard(
+    () async {
+      await _db.transaction(() async {
+        final version = await _versionDao.getById(versionId);
+        if (version == null) {
+          throw const ValidationException('历史版本已不存在，请刷新后重试');
+        }
+        if (version.noteId != noteId) {
+          throw const ValidationException('历史版本不属于当前笔记');
+        }
+        final normalized = name?.trim();
+        final storedName = normalized == null || normalized.isEmpty
+            ? null
+            : normalized;
+        if (storedName != null && storedName.length > 50) {
+          throw const ValidationException('版本名称不能超过50个字符');
+        }
+        if (storedName != null) {
+          final conflict = await _versionDao.getByName(
+            noteId: noteId,
+            name: storedName,
+            excludingVersionId: versionId,
+          );
+          if (conflict != null) {
+            throw const ValidationException('版本名称已存在');
+          }
+        }
+        final updated = await _versionDao.renameVersion(versionId, storedName);
+        if (updated != 1) {
+          throw StateError('更新历史版本名称行数异常: $versionId/$updated');
+        }
+      });
+    },
+    orElse: (e) => e is ValidationException
+        ? Failure(e)
+        : const Failure(
+            DatabaseException('重命名历史版本失败', techDetail: 'renameVersion'),
+          ),
+  );
+
   Future<void> _saveVersion({
     required String noteId,
     required String snapshotJson,
