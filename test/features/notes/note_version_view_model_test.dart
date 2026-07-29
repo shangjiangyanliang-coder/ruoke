@@ -153,6 +153,7 @@ class _FakeNoteRepository implements NoteRepository {
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
+    bool saveCurrentBeforeRestore = false,
   }) async {
     if (failRestore) {
       return const Failure(DatabaseException('恢复失败'));

@@ -241,6 +241,7 @@ class LocalNoteRepository implements NoteRepository {
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
+    bool saveCurrentBeforeRestore = false,
   }) => guard(
     () async {
       final now = nowMs();
@@ -267,7 +268,8 @@ class LocalNoteRepository implements NoteRepository {
                 tagNames: currentTagNames,
               )
             : decodedTarget;
-        if (!currentSnapshot.hasSameContent(restoredSnapshot)) {
+        if (saveCurrentBeforeRestore &&
+            !currentSnapshot.hasSameContent(restoredSnapshot)) {
           await _saveVersion(
             noteId: noteId,
             snapshotJson: currentSnapshot.encode(),

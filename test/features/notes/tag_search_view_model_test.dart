@@ -314,6 +314,7 @@ class _FakeNoteRepository implements NoteRepository {
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
+    bool saveCurrentBeforeRestore = false,
   }) => throw UnimplementedError();
 }
 

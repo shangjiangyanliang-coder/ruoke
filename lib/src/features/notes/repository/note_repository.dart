@@ -59,9 +59,10 @@ abstract class NoteRepository {
     required Set<String> versionIds,
   });
 
-  /// 将某个历史版本恢复为当前正文，并保留恢复前的正文快照。
+  /// 将某个历史版本恢复为当前正文；可选保留恢复前的完整快照。
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
+    bool saveCurrentBeforeRestore = false,
   });
 }

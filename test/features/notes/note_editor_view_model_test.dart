@@ -445,6 +445,7 @@ class _CreateReturnsNoteRepository implements NoteRepository {
   Future<Result<void>> restoreVersion({
     required String noteId,
     required int versionNo,
+    bool saveCurrentBeforeRestore = false,
   }) async => const Success<void>(null);
 
   @override

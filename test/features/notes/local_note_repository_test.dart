@@ -81,7 +81,7 @@ void main() {
     expect(snapshot.contentJson, oldContent);
   });
 
-  test('恢复指定版本会保留回退前正文并写回目标快照', () async {
+  test('默认恢复指定版本不会保存回退前正文快照', () async {
     final firstContent = _delta([_op('第一版', color: 'red')]);
     final secondContent = _delta([_op('第二版', underline: true)]);
     final createResult = await repository.create(
@@ -102,11 +102,7 @@ void main() {
     final highlights = await db.noteHighlightDao.listByNote(noteId);
 
     expect(note?.contentJson, firstContent);
-    expect(versions, hasLength(2));
-    expect(
-      NoteEditSnapshot.decode(versions.first.snapshotJson).contentJson,
-      secondContent,
-    );
+    expect(versions, hasLength(1));
     expect(highlights.map((item) => '${item.kind}:${item.body}'), ['red:第一版']);
   });
 
@@ -255,6 +251,7 @@ void main() {
     final result = await repository.restoreVersion(
       noteId: noteId,
       versionNo: 1,
+      saveCurrentBeforeRestore: true,
     );
 
     expect(result, isA<Success<void>>());
