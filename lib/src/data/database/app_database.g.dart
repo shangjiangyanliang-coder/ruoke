@@ -1482,6 +1482,15 @@ class $NoteVersionsTable extends NoteVersions
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1489,6 +1498,7 @@ class $NoteVersionsTable extends NoteVersions
     versionNo,
     snapshotJson,
     createdAt,
+    name,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1542,6 +1552,12 @@ class $NoteVersionsTable extends NoteVersions
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
     return context;
   }
 
@@ -1571,6 +1587,10 @@ class $NoteVersionsTable extends NoteVersions
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
       )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
     );
   }
 
@@ -1596,12 +1616,16 @@ class NoteVersionEntity extends DataClass
 
   /// 版本生成时间（毫秒）
   final int createdAt;
+
+  /// 用户可选的自定义版本名称；为空时界面显示默认版本号。
+  final String? name;
   const NoteVersionEntity({
     required this.id,
     required this.noteId,
     required this.versionNo,
     required this.snapshotJson,
     required this.createdAt,
+    this.name,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1611,6 +1635,9 @@ class NoteVersionEntity extends DataClass
     map['version_no'] = Variable<int>(versionNo);
     map['snapshot_json'] = Variable<String>(snapshotJson);
     map['created_at'] = Variable<int>(createdAt);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
     return map;
   }
 
@@ -1621,6 +1648,7 @@ class NoteVersionEntity extends DataClass
       versionNo: Value(versionNo),
       snapshotJson: Value(snapshotJson),
       createdAt: Value(createdAt),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
     );
   }
 
@@ -1635,6 +1663,7 @@ class NoteVersionEntity extends DataClass
       versionNo: serializer.fromJson<int>(json['versionNo']),
       snapshotJson: serializer.fromJson<String>(json['snapshotJson']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
+      name: serializer.fromJson<String?>(json['name']),
     );
   }
   @override
@@ -1646,6 +1675,7 @@ class NoteVersionEntity extends DataClass
       'versionNo': serializer.toJson<int>(versionNo),
       'snapshotJson': serializer.toJson<String>(snapshotJson),
       'createdAt': serializer.toJson<int>(createdAt),
+      'name': serializer.toJson<String?>(name),
     };
   }
 
@@ -1655,12 +1685,14 @@ class NoteVersionEntity extends DataClass
     int? versionNo,
     String? snapshotJson,
     int? createdAt,
+    Value<String?> name = const Value.absent(),
   }) => NoteVersionEntity(
     id: id ?? this.id,
     noteId: noteId ?? this.noteId,
     versionNo: versionNo ?? this.versionNo,
     snapshotJson: snapshotJson ?? this.snapshotJson,
     createdAt: createdAt ?? this.createdAt,
+    name: name.present ? name.value : this.name,
   );
   NoteVersionEntity copyWithCompanion(NoteVersionsCompanion data) {
     return NoteVersionEntity(
@@ -1671,6 +1703,7 @@ class NoteVersionEntity extends DataClass
           ? data.snapshotJson.value
           : this.snapshotJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      name: data.name.present ? data.name.value : this.name,
     );
   }
 
@@ -1681,14 +1714,15 @@ class NoteVersionEntity extends DataClass
           ..write('noteId: $noteId, ')
           ..write('versionNo: $versionNo, ')
           ..write('snapshotJson: $snapshotJson, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('name: $name')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode =>
-      Object.hash(id, noteId, versionNo, snapshotJson, createdAt);
+      Object.hash(id, noteId, versionNo, snapshotJson, createdAt, name);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1697,7 +1731,8 @@ class NoteVersionEntity extends DataClass
           other.noteId == this.noteId &&
           other.versionNo == this.versionNo &&
           other.snapshotJson == this.snapshotJson &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.name == this.name);
 }
 
 class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
@@ -1706,6 +1741,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
   final Value<int> versionNo;
   final Value<String> snapshotJson;
   final Value<int> createdAt;
+  final Value<String?> name;
   final Value<int> rowid;
   const NoteVersionsCompanion({
     this.id = const Value.absent(),
@@ -1713,6 +1749,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
     this.versionNo = const Value.absent(),
     this.snapshotJson = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.name = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NoteVersionsCompanion.insert({
@@ -1721,6 +1758,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
     required int versionNo,
     required String snapshotJson,
     required int createdAt,
+    this.name = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        noteId = Value(noteId),
@@ -1733,6 +1771,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
     Expression<int>? versionNo,
     Expression<String>? snapshotJson,
     Expression<int>? createdAt,
+    Expression<String>? name,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1741,6 +1780,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
       if (versionNo != null) 'version_no': versionNo,
       if (snapshotJson != null) 'snapshot_json': snapshotJson,
       if (createdAt != null) 'created_at': createdAt,
+      if (name != null) 'name': name,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1751,6 +1791,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
     Value<int>? versionNo,
     Value<String>? snapshotJson,
     Value<int>? createdAt,
+    Value<String?>? name,
     Value<int>? rowid,
   }) {
     return NoteVersionsCompanion(
@@ -1759,6 +1800,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
       versionNo: versionNo ?? this.versionNo,
       snapshotJson: snapshotJson ?? this.snapshotJson,
       createdAt: createdAt ?? this.createdAt,
+      name: name ?? this.name,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1781,6 +1823,9 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1795,6 +1840,7 @@ class NoteVersionsCompanion extends UpdateCompanion<NoteVersionEntity> {
           ..write('versionNo: $versionNo, ')
           ..write('snapshotJson: $snapshotJson, ')
           ..write('createdAt: $createdAt, ')
+          ..write('name: $name, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3531,6 +3577,7 @@ typedef $$NoteVersionsTableCreateCompanionBuilder =
       required int versionNo,
       required String snapshotJson,
       required int createdAt,
+      Value<String?> name,
       Value<int> rowid,
     });
 typedef $$NoteVersionsTableUpdateCompanionBuilder =
@@ -3540,6 +3587,7 @@ typedef $$NoteVersionsTableUpdateCompanionBuilder =
       Value<int> versionNo,
       Value<String> snapshotJson,
       Value<int> createdAt,
+      Value<String?> name,
       Value<int> rowid,
     });
 
@@ -3574,6 +3622,11 @@ class $$NoteVersionsTableFilterComposer
 
   ColumnFilters<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3611,6 +3664,11 @@ class $$NoteVersionsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NoteVersionsTableAnnotationComposer
@@ -3638,6 +3696,9 @@ class $$NoteVersionsTableAnnotationComposer
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
 }
 
 class $$NoteVersionsTableTableManager
@@ -3680,6 +3741,7 @@ class $$NoteVersionsTableTableManager
                 Value<int> versionNo = const Value.absent(),
                 Value<String> snapshotJson = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
+                Value<String?> name = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteVersionsCompanion(
                 id: id,
@@ -3687,6 +3749,7 @@ class $$NoteVersionsTableTableManager
                 versionNo: versionNo,
                 snapshotJson: snapshotJson,
                 createdAt: createdAt,
+                name: name,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3696,6 +3759,7 @@ class $$NoteVersionsTableTableManager
                 required int versionNo,
                 required String snapshotJson,
                 required int createdAt,
+                Value<String?> name = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteVersionsCompanion.insert(
                 id: id,
@@ -3703,6 +3767,7 @@ class $$NoteVersionsTableTableManager
                 versionNo: versionNo,
                 snapshotJson: snapshotJson,
                 createdAt: createdAt,
+                name: name,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

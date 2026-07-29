@@ -22,6 +22,9 @@ class NoteVersions extends Table {
   /// 版本生成时间（毫秒）
   IntColumn get createdAt => integer()();
 
+  /// 用户可选的自定义版本名称；为空时界面显示默认版本号。
+  TextColumn get name => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

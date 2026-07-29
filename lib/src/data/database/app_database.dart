@@ -51,7 +51,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   /// 数据库 schema 版本号。新增表或改表结构时 +1，并在 migration 里处理升级。
-  /// 当前 = 1：笔记模块初始 6 张表（subject/note/note_version/note_highlight/tag/note_tag）。
+  /// 当前 = 2：历史版本增加可选自定义名称。
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(noteVersions, noteVersions.name);
+      }
+    },
+  );
 }
