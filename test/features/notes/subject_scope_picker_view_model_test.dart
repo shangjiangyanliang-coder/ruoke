@@ -177,6 +177,7 @@ Subject _subject(String id, String name, int level, {String? parentId}) =>
       parentId: parentId,
       name: name,
       level: level,
+      folderId: null,
       sortOrder: 0,
       createdAt: 1,
       updatedAt: 1,

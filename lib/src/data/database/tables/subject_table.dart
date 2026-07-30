@@ -20,6 +20,9 @@ class Subjects extends Table {
   /// 0=书 1=章 2=节
   IntColumn get level => integer()();
 
+  /// 仅书（level=0）可归属的文件夹 id；未归类书保持 null。
+  TextColumn get folderId => text().nullable()();
+
   /// 同级排序
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 

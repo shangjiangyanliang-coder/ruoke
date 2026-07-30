@@ -82,6 +82,15 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
     );
   }
 
+  /// 更新书的文件夹归属与更新时间。
+  Future<int> updateFolder(String id, String? folderId, int updatedAt) =>
+      (update(subjects)..where((subject) => subject.id.equals(id))).write(
+        SubjectsCompanion(
+          folderId: Value(folderId),
+          updatedAt: Value(updatedAt),
+        ),
+      );
+
   /// 统计未软删子节点数（判叶/判空用）。parentId 为 null 时数顶层。
   Future<int> countChildren(String? parentId) async {
     final count = countAll();

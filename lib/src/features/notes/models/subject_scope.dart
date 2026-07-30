@@ -1,5 +1,5 @@
 /// 科目范围类型。
-enum SubjectScopeKind { all, subtree, level }
+enum SubjectScopeKind { all, subtree, level, folder, ungroupedBooks }
 
 /// 笔记搜索的书—章—节范围。
 class SubjectScope {
@@ -21,6 +21,16 @@ class SubjectScope {
     : kind = SubjectScopeKind.level,
       subjectId = null,
       assert(level != null && level >= 0 && level <= 2);
+
+  const SubjectScope.folder(this.subjectId)
+    : kind = SubjectScopeKind.folder,
+      level = null,
+      assert(subjectId != null && subjectId != '');
+
+  const SubjectScope.ungroupedBooks()
+    : kind = SubjectScopeKind.ungroupedBooks,
+      subjectId = null,
+      level = null;
 
   @override
   bool operator ==(Object other) =>

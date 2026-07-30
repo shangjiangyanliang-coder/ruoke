@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/errors/result.dart';
 import '../models/subject.dart';
+import '../models/subject_folder.dart';
 import '../models/subject_scope.dart';
+import '../providers.dart';
 import '../view_model/subject_scope_picker_view_model.dart';
 import '../view_model/view_model_providers.dart';
 
@@ -95,6 +98,16 @@ class _SubjectScopePickerDialogState
                 child: Text('全部节'),
               ),
             ],
+          ),
+          IconButton(
+            tooltip: '选择文件夹范围',
+            icon: const Icon(Icons.folder_outlined),
+            onPressed: () async {
+              final selection = await _showFolderScopePicker(context);
+              if (selection != null && context.mounted) {
+                Navigator.pop(context, selection);
+              }
+            },
           ),
         ],
       ),
@@ -421,4 +434,114 @@ class _InlineError extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<SubjectScopeSelection?> _showFolderScopePicker(BuildContext context) {
+  return showDialog<SubjectScopeSelection>(
+    context: context,
+    builder: (_) => const _FolderScopePickerDialog(),
+  );
+}
+
+class _FolderScopePickerDialog extends ConsumerStatefulWidget {
+  const _FolderScopePickerDialog();
+
+  @override
+  ConsumerState<_FolderScopePickerDialog> createState() =>
+      _FolderScopePickerDialogState();
+}
+
+class _FolderScopePickerDialogState
+    extends ConsumerState<_FolderScopePickerDialog> {
+  String keyword = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('选择文件夹范围'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 420,
+        child: FutureBuilder(
+          future: ref.read(folderRepositoryProvider).listAll(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final result = snapshot.data!;
+            if (result is! Success<List<SubjectFolder>>) {
+              return const Center(child: Text('读取文件夹失败'));
+            }
+            final folders = result.value;
+            final names = {for (final folder in folders) folder.id: folder.name};
+            final visible = keyword.isEmpty
+                ? folders.where((folder) => folder.parentId == null).toList()
+                : folders
+                    .where((folder) => folder.name.contains(keyword))
+                    .toList();
+            return Column(
+              children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: '搜索文件夹名称',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) => setState(() => keyword = value.trim()),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.inbox_outlined),
+                        title: const Text('未归类书籍'),
+                        onTap: () => Navigator.pop(
+                          context,
+                          const SubjectScopeSelection(
+                            scope: SubjectScope.ungroupedBooks(),
+                            label: '未归类书籍',
+                          ),
+                        ),
+                      ),
+                      for (final folder in visible)
+                        ListTile(
+                          leading: const Icon(Icons.folder_outlined),
+                          title: Text(folder.name),
+                          subtitle: keyword.isEmpty
+                              ? null
+                              : Text(_folderPath(folder, names, folders)),
+                          onTap: () => Navigator.pop(
+                            context,
+                            SubjectScopeSelection(
+                              scope: SubjectScope.folder(folder.id),
+                              label: _folderPath(folder, names, folders),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+String _folderPath(
+  SubjectFolder folder,
+  Map<String, String> names,
+  List<SubjectFolder> folders,
+) {
+  final parents = {for (final item in folders) item.id: item.parentId};
+  final path = <String>[folder.name];
+  var parentId = folder.parentId;
+  while (parentId != null && names.containsKey(parentId)) {
+    path.add(names[parentId]!);
+    parentId = parents[parentId];
+  }
+  return path.reversed.join(' > ');
 }

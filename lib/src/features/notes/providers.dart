@@ -8,6 +8,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/database/app_database.dart';
+import 'repository/folder_repository.dart';
+import 'repository/local_folder_repository.dart';
 import 'repository/local_note_repository.dart';
 import 'repository/local_subject_repository.dart';
 import 'repository/local_tag_repository.dart';
@@ -32,6 +34,12 @@ final Provider<NoteRepository> noteRepositoryProvider =
 final Provider<SubjectRepository> subjectRepositoryProvider =
     Provider<SubjectRepository>((ref) {
       return LocalSubjectRepository(ref.watch(appDatabaseProvider));
+    });
+
+/// FolderRepository Provider：提供文件夹创建、移动和安全解散能力。
+final Provider<FolderRepository> folderRepositoryProvider =
+    Provider<FolderRepository>((ref) {
+      return LocalFolderRepository(ref.watch(appDatabaseProvider));
     });
 
 /// TagRepository Provider：注入 db，管理标签及笔记标签关联。

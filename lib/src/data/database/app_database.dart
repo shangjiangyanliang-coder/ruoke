@@ -6,6 +6,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'daos/folder_dao.dart';
 import 'daos/note_dao.dart';
 import 'daos/note_highlight_dao.dart';
 import 'daos/note_tag_dao.dart';
@@ -16,6 +17,7 @@ import 'tables/note_highlight_table.dart';
 import 'tables/note_table.dart';
 import 'tables/note_tag_table.dart';
 import 'tables/note_version_table.dart';
+import 'tables/subject_folder_table.dart';
 import 'tables/subject_table.dart';
 import 'tables/tag_table.dart';
 
@@ -23,10 +25,11 @@ part 'app_database.g.dart';
 
 /// 全项目 Drift 数据库单例。
 ///
-/// 当前登记笔记模块 6 张表 + 6 个 DAO。题库/复习/AI 等后续表分批加入时，
+/// 当前登记笔记模块 7 张表 + 7 个 DAO。题库/复习/AI 等后续表分批加入时，
 /// 在 tables/daos 列表里追加即可，schemaVersion 顺次 +1。
 @DriftDatabase(
   tables: [
+    SubjectFolders,
     Subjects,
     Notes,
     NoteVersions,
@@ -35,6 +38,7 @@ part 'app_database.g.dart';
     NoteTags,
   ],
   daos: [
+    FolderDao,
     SubjectDao,
     NoteDao,
     NoteVersionDao,
@@ -51,9 +55,9 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   /// 数据库 schema 版本号。新增表或改表结构时 +1，并在 migration 里处理升级。
-  /// 当前 = 2：历史版本增加可选自定义名称。
+  /// 当前 = 3：书增加可选文件夹归属。
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -61,6 +65,10 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.addColumn(noteVersions, noteVersions.name);
+      }
+      if (from < 3) {
+        await m.createTable(subjectFolders);
+        await m.addColumn(subjects, subjects.folderId);
       }
     },
   );

@@ -19,6 +19,9 @@ class Subject {
   /// 0=书 1=章 2=节
   final int level;
 
+  /// 仅书可设置的文件夹归属；null 表示未归类书。
+  final String? folderId;
+
   /// 同级排序
   final int sortOrder;
 
@@ -39,6 +42,7 @@ class Subject {
     required this.parentId,
     required this.name,
     required this.level,
+    required this.folderId,
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
@@ -52,6 +56,7 @@ class Subject {
         parentId: e.parentId,
         name: e.name,
         level: e.level,
+        folderId: e.folderId,
         sortOrder: e.sortOrder,
         createdAt: e.createdAt,
         updatedAt: e.updatedAt,

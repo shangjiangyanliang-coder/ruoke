@@ -8,11 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/notes/view/note_editor_view.dart';
-import '../features/notes/view/note_list_view.dart';
+import '../features/notes/view/library_browser_view.dart';
 import '../features/notes/view/note_search_view.dart';
 import '../features/notes/view/note_version_list_view.dart';
 import '../features/notes/view/subject_manage_view.dart';
 import '../features/notes/view/tag_management_view.dart';
+import '../features/notes/models/library_location.dart';
 import 'placeholder_page.dart';
 import 'settings_view.dart';
 
@@ -64,7 +65,32 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/notes',
-              builder: (context, state) => const NoteListView(),
+              builder: (context, state) =>
+                  const LibraryBrowserView(location: LibraryLocation.root()),
+              routes: [
+                GoRoute(
+                  path: 'ungrouped',
+                  builder: (context, state) => const LibraryBrowserView(
+                    location: LibraryLocation.ungroupedBooks(),
+                  ),
+                ),
+                GoRoute(
+                  path: 'folder/:folderId',
+                  builder: (context, state) => LibraryBrowserView(
+                    location: LibraryLocation.folder(
+                      state.pathParameters['folderId']!,
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: 'subject/:subjectId',
+                  builder: (context, state) => LibraryBrowserView(
+                    location: LibraryLocation.subject(
+                      state.pathParameters['subjectId']!,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -97,7 +123,15 @@ final GoRouter appRouter = GoRouter(
               routes: [
                 GoRoute(
                   path: 'subjects',
-                  builder: (context, state) => const SubjectManageView(),
+                  builder: (context, state) => const LibraryBrowserView(
+                    location: LibraryLocation.root(),
+                  ),
+                  routes: [
+                    GoRoute(
+                      path: 'legacy',
+                      builder: (context, state) => const SubjectManageView(),
+                    ),
+                  ],
                 ),
               ],
             ),

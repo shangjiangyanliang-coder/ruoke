@@ -299,6 +299,33 @@ void main() {
     expect(books.map((note) => note.id), isNot(contains('uncategorized-note')));
   });
 
+  test('指定文件夹范围递归包含其内书及其书章节的笔记', () async {
+    await _insertSubjectTree(db);
+    await _insertScopeNotes(db);
+    await db.into(db.subjectFolders).insert(
+      const SubjectFoldersCompanion(
+        id: Value('folder-a'),
+        name: Value('资料'),
+        createdAt: Value(1),
+        updatedAt: Value(1),
+      ),
+    );
+    await db.subjectDao.updateFolder('book-a', 'folder-a', 2);
+
+    final notes = _successValue(
+      await noteRepository.search(
+        const NoteSearchQuery(subjectScope: SubjectScope.folder('folder-a')),
+      ),
+    );
+
+    expect(notes.map((note) => note.id).toSet(), {
+      'book-a-note',
+      'chapter-a-note',
+      'section-a-note',
+      'chapter-b-note',
+    });
+  });
+
   test('指定不存在或已软删除的节点返回范围已不存在', () async {
     await _insertSubjectTree(db);
     await db.subjectDao.softDelete('chapter-a', 99);

@@ -86,6 +86,14 @@ class LocalNoteRepository implements NoteRepository {
     if (scope.kind == SubjectScopeKind.all) return null;
 
     final subjects = await _db.subjectDao.listAll();
+    if (scope.kind == SubjectScopeKind.ungroupedBooks) {
+      return _descendantSubjectIds(
+        subjects,
+        subjects
+            .where((subject) => subject.level == 0 && subject.folderId == null)
+            .map((subject) => subject.id),
+      );
+    }
     if (scope.kind == SubjectScopeKind.level) {
       return subjects
           .where((subject) => subject.level == scope.level)
@@ -93,10 +101,45 @@ class LocalNoteRepository implements NoteRepository {
           .toSet();
     }
 
+    if (scope.kind == SubjectScopeKind.folder) {
+      final targetId = scope.subjectId!;
+      final folders = await _db.folderDao.listAll();
+      if (!folders.any((folder) => folder.id == targetId)) {
+        throw const ValidationException('所选范围已不存在，请重新选择');
+      }
+      final folderChildren = <String, List<String>>{};
+      for (final folder in folders) {
+        if (folder.parentId != null) {
+          (folderChildren[folder.parentId!] ??= []).add(folder.id);
+        }
+      }
+      final folderIds = <String>{};
+      final pendingFolders = <String>[targetId];
+      while (pendingFolders.isNotEmpty) {
+        final current = pendingFolders.removeLast();
+        if (folderIds.add(current)) {
+          pendingFolders.addAll(folderChildren[current] ?? const []);
+        }
+      }
+      return _descendantSubjectIds(
+        subjects,
+        subjects
+            .where((subject) => subject.level == 0 && folderIds.contains(subject.folderId))
+            .map((subject) => subject.id),
+      );
+    }
+
     final targetId = scope.subjectId!;
     if (!subjects.any((subject) => subject.id == targetId)) {
       throw const ValidationException('所选范围已不存在，请重新选择');
     }
+    return _descendantSubjectIds(subjects, [targetId]);
+  }
+
+  Set<String> _descendantSubjectIds(
+    List<SubjectEntity> subjects,
+    Iterable<String> roots,
+  ) {
     final childrenByParent = <String, List<String>>{};
     for (final subject in subjects) {
       final parentId = subject.parentId;
@@ -105,7 +148,7 @@ class LocalNoteRepository implements NoteRepository {
       }
     }
     final result = <String>{};
-    final pending = <String>[targetId];
+    final pending = <String>[...roots];
     while (pending.isNotEmpty) {
       final current = pending.removeLast();
       if (result.add(current)) {

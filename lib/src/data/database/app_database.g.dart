@@ -3,12 +3,12 @@
 part of 'app_database.dart';
 
 // ignore_for_file: type=lint
-class $SubjectsTable extends Subjects
-    with TableInfo<$SubjectsTable, SubjectEntity> {
+class $SubjectFoldersTable extends SubjectFolders
+    with TableInfo<$SubjectFoldersTable, SubjectFolderEntity> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $SubjectsTable(this.attachedDatabase, [this._alias]);
+  $SubjectFoldersTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -36,15 +36,6 @@ class $SubjectsTable extends Subjects
     aliasedName,
     false,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _levelMeta = const VerificationMeta('level');
-  @override
-  late final GeneratedColumn<int> level = GeneratedColumn<int>(
-    'level',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
@@ -112,7 +103,555 @@ class $SubjectsTable extends Subjects
     id,
     parentId,
     name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    isDeleted,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'subject_folders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SubjectFolderEntity> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SubjectFolderEntity map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SubjectFolderEntity(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      ),
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SubjectFoldersTable createAlias(String alias) {
+    return $SubjectFoldersTable(attachedDatabase, alias);
+  }
+}
+
+class SubjectFolderEntity extends DataClass
+    implements Insertable<SubjectFolderEntity> {
+  /// UUID 主键。
+  final String id;
+
+  /// 父文件夹 id；根文件夹为 null。
+  final String? parentId;
+
+  /// 同一父目录内必须由仓储层保证唯一的名称。
+  final String name;
+
+  /// 同一目录内的显示顺序。
+  final int sortOrder;
+
+  /// 创建时间（毫秒）。
+  final int createdAt;
+
+  /// 更新时间（毫秒）。
+  final int updatedAt;
+
+  /// 软删标志，避免解散或移动失败时丢失数据。
+  final bool isDeleted;
+
+  /// 软删时间。
+  final int? deletedAt;
+  const SubjectFolderEntity({
+    required this.id,
+    this.parentId,
+    required this.name,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.isDeleted,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<String>(parentId);
+    }
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<int>(deletedAt);
+    }
+    return map;
+  }
+
+  SubjectFoldersCompanion toCompanion(bool nullToAbsent) {
+    return SubjectFoldersCompanion(
+      id: Value(id),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      isDeleted: Value(isDeleted),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SubjectFolderEntity.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SubjectFolderEntity(
+      id: serializer.fromJson<String>(json['id']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      deletedAt: serializer.fromJson<int?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'parentId': serializer.toJson<String?>(parentId),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'deletedAt': serializer.toJson<int?>(deletedAt),
+    };
+  }
+
+  SubjectFolderEntity copyWith({
+    String? id,
+    Value<String?> parentId = const Value.absent(),
+    String? name,
+    int? sortOrder,
+    int? createdAt,
+    int? updatedAt,
+    bool? isDeleted,
+    Value<int?> deletedAt = const Value.absent(),
+  }) => SubjectFolderEntity(
+    id: id ?? this.id,
+    parentId: parentId.present ? parentId.value : this.parentId,
+    name: name ?? this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    isDeleted: isDeleted ?? this.isDeleted,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SubjectFolderEntity copyWithCompanion(SubjectFoldersCompanion data) {
+    return SubjectFolderEntity(
+      id: data.id.present ? data.id.value : this.id,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubjectFolderEntity(')
+          ..write('id: $id, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    parentId,
+    name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    isDeleted,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SubjectFolderEntity &&
+          other.id == this.id &&
+          other.parentId == this.parentId &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.isDeleted == this.isDeleted &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SubjectFoldersCompanion extends UpdateCompanion<SubjectFolderEntity> {
+  final Value<String> id;
+  final Value<String?> parentId;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<bool> isDeleted;
+  final Value<int?> deletedAt;
+  final Value<int> rowid;
+  const SubjectFoldersCompanion({
+    this.id = const Value.absent(),
+    this.parentId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SubjectFoldersCompanion.insert({
+    required String id,
+    this.parentId = const Value.absent(),
+    required String name,
+    this.sortOrder = const Value.absent(),
+    required int createdAt,
+    required int updatedAt,
+    this.isDeleted = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<SubjectFolderEntity> custom({
+    Expression<String>? id,
+    Expression<String>? parentId,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<bool>? isDeleted,
+    Expression<int>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (parentId != null) 'parent_id': parentId,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SubjectFoldersCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? parentId,
+    Value<String>? name,
+    Value<int>? sortOrder,
+    Value<int>? createdAt,
+    Value<int>? updatedAt,
+    Value<bool>? isDeleted,
+    Value<int?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SubjectFoldersCompanion(
+      id: id ?? this.id,
+      parentId: parentId ?? this.parentId,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<int>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubjectFoldersCompanion(')
+          ..write('id: $id, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SubjectsTable extends Subjects
+    with TableInfo<$SubjectsTable, SubjectEntity> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SubjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _levelMeta = const VerificationMeta('level');
+  @override
+  late final GeneratedColumn<int> level = GeneratedColumn<int>(
+    'level',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _folderIdMeta = const VerificationMeta(
+    'folderId',
+  );
+  @override
+  late final GeneratedColumn<String> folderId = GeneratedColumn<String>(
+    'folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    parentId,
+    name,
     level,
+    folderId,
     sortOrder,
     createdAt,
     updatedAt,
@@ -157,6 +696,12 @@ class $SubjectsTable extends Subjects
       );
     } else if (isInserting) {
       context.missing(_levelMeta);
+    }
+    if (data.containsKey('folder_id')) {
+      context.handle(
+        _folderIdMeta,
+        folderId.isAcceptableOrUnknown(data['folder_id']!, _folderIdMeta),
+      );
     }
     if (data.containsKey('sort_order')) {
       context.handle(
@@ -217,6 +762,10 @@ class $SubjectsTable extends Subjects
         DriftSqlType.int,
         data['${effectivePrefix}level'],
       )!,
+      folderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder_id'],
+      ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -259,6 +808,9 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
   /// 0=书 1=章 2=节
   final int level;
 
+  /// 仅书（level=0）可归属的文件夹 id；未归类书保持 null。
+  final String? folderId;
+
   /// 同级排序
   final int sortOrder;
 
@@ -278,6 +830,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
     this.parentId,
     required this.name,
     required this.level,
+    this.folderId,
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
@@ -293,6 +846,9 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
     }
     map['name'] = Variable<String>(name);
     map['level'] = Variable<int>(level);
+    if (!nullToAbsent || folderId != null) {
+      map['folder_id'] = Variable<String>(folderId);
+    }
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -311,6 +867,9 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
           : Value(parentId),
       name: Value(name),
       level: Value(level),
+      folderId: folderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(folderId),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -331,6 +890,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
       parentId: serializer.fromJson<String?>(json['parentId']),
       name: serializer.fromJson<String>(json['name']),
       level: serializer.fromJson<int>(json['level']),
+      folderId: serializer.fromJson<String?>(json['folderId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
@@ -346,6 +906,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
       'parentId': serializer.toJson<String?>(parentId),
       'name': serializer.toJson<String>(name),
       'level': serializer.toJson<int>(level),
+      'folderId': serializer.toJson<String?>(folderId),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
@@ -359,6 +920,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
     Value<String?> parentId = const Value.absent(),
     String? name,
     int? level,
+    Value<String?> folderId = const Value.absent(),
     int? sortOrder,
     int? createdAt,
     int? updatedAt,
@@ -369,6 +931,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
     parentId: parentId.present ? parentId.value : this.parentId,
     name: name ?? this.name,
     level: level ?? this.level,
+    folderId: folderId.present ? folderId.value : this.folderId,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -381,6 +944,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
       parentId: data.parentId.present ? data.parentId.value : this.parentId,
       name: data.name.present ? data.name.value : this.name,
       level: data.level.present ? data.level.value : this.level,
+      folderId: data.folderId.present ? data.folderId.value : this.folderId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -396,6 +960,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
           ..write('parentId: $parentId, ')
           ..write('name: $name, ')
           ..write('level: $level, ')
+          ..write('folderId: $folderId, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -411,6 +976,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
     parentId,
     name,
     level,
+    folderId,
     sortOrder,
     createdAt,
     updatedAt,
@@ -425,6 +991,7 @@ class SubjectEntity extends DataClass implements Insertable<SubjectEntity> {
           other.parentId == this.parentId &&
           other.name == this.name &&
           other.level == this.level &&
+          other.folderId == this.folderId &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -437,6 +1004,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
   final Value<String?> parentId;
   final Value<String> name;
   final Value<int> level;
+  final Value<String?> folderId;
   final Value<int> sortOrder;
   final Value<int> createdAt;
   final Value<int> updatedAt;
@@ -448,6 +1016,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
     this.parentId = const Value.absent(),
     this.name = const Value.absent(),
     this.level = const Value.absent(),
+    this.folderId = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -460,6 +1029,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
     this.parentId = const Value.absent(),
     required String name,
     required int level,
+    this.folderId = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required int createdAt,
     required int updatedAt,
@@ -476,6 +1046,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
     Expression<String>? parentId,
     Expression<String>? name,
     Expression<int>? level,
+    Expression<String>? folderId,
     Expression<int>? sortOrder,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
@@ -488,6 +1059,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
       if (parentId != null) 'parent_id': parentId,
       if (name != null) 'name': name,
       if (level != null) 'level': level,
+      if (folderId != null) 'folder_id': folderId,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -502,6 +1074,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
     Value<String?>? parentId,
     Value<String>? name,
     Value<int>? level,
+    Value<String?>? folderId,
     Value<int>? sortOrder,
     Value<int>? createdAt,
     Value<int>? updatedAt,
@@ -514,6 +1087,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
       parentId: parentId ?? this.parentId,
       name: name ?? this.name,
       level: level ?? this.level,
+      folderId: folderId ?? this.folderId,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -537,6 +1111,9 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
     }
     if (level.present) {
       map['level'] = Variable<int>(level.value);
+    }
+    if (folderId.present) {
+      map['folder_id'] = Variable<String>(folderId.value);
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
@@ -566,6 +1143,7 @@ class SubjectsCompanion extends UpdateCompanion<SubjectEntity> {
           ..write('parentId: $parentId, ')
           ..write('name: $name, ')
           ..write('level: $level, ')
+          ..write('folderId: $folderId, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2892,12 +3470,14 @@ class NoteTagsCompanion extends UpdateCompanion<NoteTagEntity> {
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $SubjectFoldersTable subjectFolders = $SubjectFoldersTable(this);
   late final $SubjectsTable subjects = $SubjectsTable(this);
   late final $NotesTable notes = $NotesTable(this);
   late final $NoteVersionsTable noteVersions = $NoteVersionsTable(this);
   late final $NoteHighlightsTable noteHighlights = $NoteHighlightsTable(this);
   late final $TagsTable tags = $TagsTable(this);
   late final $NoteTagsTable noteTags = $NoteTagsTable(this);
+  late final FolderDao folderDao = FolderDao(this as AppDatabase);
   late final SubjectDao subjectDao = SubjectDao(this as AppDatabase);
   late final NoteDao noteDao = NoteDao(this as AppDatabase);
   late final NoteVersionDao noteVersionDao = NoteVersionDao(
@@ -2913,6 +3493,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
+    subjectFolders,
     subjects,
     notes,
     noteVersions,
@@ -2922,12 +3503,280 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
 }
 
+typedef $$SubjectFoldersTableCreateCompanionBuilder =
+    SubjectFoldersCompanion Function({
+      required String id,
+      Value<String?> parentId,
+      required String name,
+      Value<int> sortOrder,
+      required int createdAt,
+      required int updatedAt,
+      Value<bool> isDeleted,
+      Value<int?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SubjectFoldersTableUpdateCompanionBuilder =
+    SubjectFoldersCompanion Function({
+      Value<String> id,
+      Value<String?> parentId,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<int> createdAt,
+      Value<int> updatedAt,
+      Value<bool> isDeleted,
+      Value<int?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SubjectFoldersTableFilterComposer
+    extends Composer<_$AppDatabase, $SubjectFoldersTable> {
+  $$SubjectFoldersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SubjectFoldersTableOrderingComposer
+    extends Composer<_$AppDatabase, $SubjectFoldersTable> {
+  $$SubjectFoldersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SubjectFoldersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SubjectFoldersTable> {
+  $$SubjectFoldersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<int> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SubjectFoldersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SubjectFoldersTable,
+          SubjectFolderEntity,
+          $$SubjectFoldersTableFilterComposer,
+          $$SubjectFoldersTableOrderingComposer,
+          $$SubjectFoldersTableAnnotationComposer,
+          $$SubjectFoldersTableCreateCompanionBuilder,
+          $$SubjectFoldersTableUpdateCompanionBuilder,
+          (
+            SubjectFolderEntity,
+            BaseReferences<
+              _$AppDatabase,
+              $SubjectFoldersTable,
+              SubjectFolderEntity
+            >,
+          ),
+          SubjectFolderEntity,
+          PrefetchHooks Function()
+        > {
+  $$SubjectFoldersTableTableManager(
+    _$AppDatabase db,
+    $SubjectFoldersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SubjectFoldersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SubjectFoldersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SubjectFoldersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<int?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubjectFoldersCompanion(
+                id: id,
+                parentId: parentId,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String?> parentId = const Value.absent(),
+                required String name,
+                Value<int> sortOrder = const Value.absent(),
+                required int createdAt,
+                required int updatedAt,
+                Value<bool> isDeleted = const Value.absent(),
+                Value<int?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubjectFoldersCompanion.insert(
+                id: id,
+                parentId: parentId,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SubjectFoldersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SubjectFoldersTable,
+      SubjectFolderEntity,
+      $$SubjectFoldersTableFilterComposer,
+      $$SubjectFoldersTableOrderingComposer,
+      $$SubjectFoldersTableAnnotationComposer,
+      $$SubjectFoldersTableCreateCompanionBuilder,
+      $$SubjectFoldersTableUpdateCompanionBuilder,
+      (
+        SubjectFolderEntity,
+        BaseReferences<
+          _$AppDatabase,
+          $SubjectFoldersTable,
+          SubjectFolderEntity
+        >,
+      ),
+      SubjectFolderEntity,
+      PrefetchHooks Function()
+    >;
 typedef $$SubjectsTableCreateCompanionBuilder =
     SubjectsCompanion Function({
       required String id,
       Value<String?> parentId,
       required String name,
       required int level,
+      Value<String?> folderId,
       Value<int> sortOrder,
       required int createdAt,
       required int updatedAt,
@@ -2941,6 +3790,7 @@ typedef $$SubjectsTableUpdateCompanionBuilder =
       Value<String?> parentId,
       Value<String> name,
       Value<int> level,
+      Value<String?> folderId,
       Value<int> sortOrder,
       Value<int> createdAt,
       Value<int> updatedAt,
@@ -2975,6 +3825,11 @@ class $$SubjectsTableFilterComposer
 
   ColumnFilters<int> get level => $composableBuilder(
     column: $table.level,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folderId => $composableBuilder(
+    column: $table.folderId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3033,6 +3888,11 @@ class $$SubjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get folderId => $composableBuilder(
+    column: $table.folderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -3079,6 +3939,9 @@ class $$SubjectsTableAnnotationComposer
 
   GeneratedColumn<int> get level =>
       $composableBuilder(column: $table.level, builder: (column) => column);
+
+  GeneratedColumn<String> get folderId =>
+      $composableBuilder(column: $table.folderId, builder: (column) => column);
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
@@ -3131,6 +3994,7 @@ class $$SubjectsTableTableManager
                 Value<String?> parentId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int> level = const Value.absent(),
+                Value<String?> folderId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
@@ -3142,6 +4006,7 @@ class $$SubjectsTableTableManager
                 parentId: parentId,
                 name: name,
                 level: level,
+                folderId: folderId,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -3155,6 +4020,7 @@ class $$SubjectsTableTableManager
                 Value<String?> parentId = const Value.absent(),
                 required String name,
                 required int level,
+                Value<String?> folderId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
@@ -3166,6 +4032,7 @@ class $$SubjectsTableTableManager
                 parentId: parentId,
                 name: name,
                 level: level,
+                folderId: folderId,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -4382,6 +5249,8 @@ typedef $$NoteTagsTableProcessedTableManager =
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
+  $$SubjectFoldersTableTableManager get subjectFolders =>
+      $$SubjectFoldersTableTableManager(_db, _db.subjectFolders);
   $$SubjectsTableTableManager get subjects =>
       $$SubjectsTableTableManager(_db, _db.subjects);
   $$NotesTableTableManager get notes =>
