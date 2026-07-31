@@ -380,6 +380,29 @@ class _FakeNoteRepository implements NoteRepository {
   Future<Result<List<Note>>> listAll() => throw UnimplementedError();
 
   @override
+  Future<Result<List<Note>>> listBySubject(String subjectId) async =>
+      const Success([]);
+
+  @override
+  Future<Result<void>> renameTitle({
+    required String id,
+    required String title,
+  }) async => const Success<void>(null);
+
+  @override
+  Future<Result<void>> moveNote({
+    required String noteId,
+    required String subjectId,
+    required int targetIndex,
+  }) async => const Success<void>(null);
+
+  @override
+  Future<Result<void>> reorderNotes({
+    required String subjectId,
+    required List<String> orderedIds,
+  }) async => const Success<void>(null);
+
+  @override
   Future<Result<List<Note>>> search(NoteSearchQuery query) =>
       throw UnimplementedError();
 

@@ -43,78 +43,77 @@ class LibraryBrowserState {
 /// 逐级浏览数据会话；位置改变即创建独立、自动释放的加载状态。
 final libraryBrowserProvider = FutureProvider.autoDispose
     .family<LibraryBrowserState, LibraryLocation>((ref, location) async {
-  final folders = ref.read(folderRepositoryProvider);
-  final subjects = ref.read(subjectRepositoryProvider);
-  final notes = ref.read(noteRepositoryProvider);
+      final folders = ref.read(folderRepositoryProvider);
+      final subjects = ref.read(subjectRepositoryProvider);
+      final notes = ref.read(noteRepositoryProvider);
 
-  T value<T>(Result<T> result) {
-    if (result is Success<T>) return result.value;
-    throw (result as Failure<T>).exception;
-  }
-
-  switch (location) {
-    case LibraryRootLocation():
-      final allNotes = value(await notes.listAll());
-      return LibraryBrowserState(
-        location: location,
-        title: '笔记',
-        folders: value(await folders.childrenOf(null)),
-        books: value(await folders.booksIn(null)),
-        notes: allNotes
-            .where((note) => note.subjectId == defaultSubjectId)
-            .toList(),
-        breadcrumbs: const [
-          LibraryBreadcrumb(label: '笔记', location: LibraryLocation.root()),
-        ],
-      );
-    case LibraryUngroupedBooksLocation():
-      return LibraryBrowserState(
-        location: location,
-        title: '未归类书',
-        books: value(await folders.booksIn(null)),
-        breadcrumbs: const [
-          LibraryBreadcrumb(label: '笔记', location: LibraryLocation.root()),
-          LibraryBreadcrumb(
-            label: '未归类书',
-            location: LibraryLocation.ungroupedBooks(),
-          ),
-        ],
-      );
-    case LibraryFolderLocation(:final folderId):
-      final allFolders = value(await folders.listAll());
-      final path = _folderPath(allFolders, folderId);
-      return LibraryBrowserState(
-        location: location,
-        title: path.isEmpty ? '文件夹' : path.last.name,
-        folders: value(await folders.childrenOf(folderId)),
-        books: value(await folders.booksIn(folderId)),
-        breadcrumbs: [
-          const LibraryBreadcrumb(label: '笔记', location: LibraryLocation.root()),
-          for (final folder in path)
-            LibraryBreadcrumb(
-              label: folder.name,
-              location: LibraryLocation.folder(folder.id),
-            ),
-        ],
-      );
-    case LibrarySubjectLocation(:final subjectId):
-      final subject = value(await subjects.getById(subjectId));
-      if (subject == null || subject.isDeleted) {
-        throw StateError('浏览位置已不存在');
+      T value<T>(Result<T> result) {
+        if (result is Success<T>) return result.value;
+        throw (result as Failure<T>).exception;
       }
-      final allNotes = value(await notes.listAll());
-      final allSubjects = value(await subjects.listAll());
-      final allFolders = value(await folders.listAll());
-      return LibraryBrowserState(
-        location: location,
-        title: subject.name,
-        subject: subject,
-        childSubjects: value(await subjects.childrenOf(subjectId)),
-        notes: allNotes.where((note) => note.subjectId == subjectId).toList(),
-        breadcrumbs: _subjectBreadcrumbs(allSubjects, allFolders, subject),
-      );
-  }
-});
+
+      switch (location) {
+        case LibraryRootLocation():
+          return LibraryBrowserState(
+            location: location,
+            title: '笔记',
+            folders: value(await folders.childrenOf(null)),
+            books: value(await folders.booksIn(null)),
+            notes: value(await notes.listBySubject(defaultSubjectId)),
+            breadcrumbs: const [
+              LibraryBreadcrumb(label: '笔记', location: LibraryLocation.root()),
+            ],
+          );
+        case LibraryUngroupedBooksLocation():
+          return LibraryBrowserState(
+            location: location,
+            title: '未归类书',
+            books: value(await folders.booksIn(null)),
+            breadcrumbs: const [
+              LibraryBreadcrumb(label: '笔记', location: LibraryLocation.root()),
+              LibraryBreadcrumb(
+                label: '未归类书',
+                location: LibraryLocation.ungroupedBooks(),
+              ),
+            ],
+          );
+        case LibraryFolderLocation(:final folderId):
+          final allFolders = value(await folders.listAll());
+          final path = _folderPath(allFolders, folderId);
+          return LibraryBrowserState(
+            location: location,
+            title: path.isEmpty ? '文件夹' : path.last.name,
+            folders: value(await folders.childrenOf(folderId)),
+            books: value(await folders.booksIn(folderId)),
+            breadcrumbs: [
+              const LibraryBreadcrumb(
+                label: '笔记',
+                location: LibraryLocation.root(),
+              ),
+              for (final folder in path)
+                LibraryBreadcrumb(
+                  label: folder.name,
+                  location: LibraryLocation.folder(folder.id),
+                ),
+            ],
+          );
+        case LibrarySubjectLocation(:final subjectId):
+          final subject = value(await subjects.getById(subjectId));
+          if (subject == null || subject.isDeleted) {
+            throw StateError('浏览位置已不存在');
+          }
+          final allSubjects = value(await subjects.listAll());
+          final allFolders = value(await folders.listAll());
+          return LibraryBrowserState(
+            location: location,
+            title: subject.name,
+            subject: subject,
+            childSubjects: value(await subjects.childrenOf(subjectId)),
+            notes: value(await notes.listBySubject(subjectId)),
+            breadcrumbs: _subjectBreadcrumbs(allSubjects, allFolders, subject),
+          );
+      }
+    });
 
 List<SubjectFolder> _folderPath(List<SubjectFolder> folders, String folderId) {
   final byId = {for (final folder in folders) folder.id: folder};

@@ -55,6 +55,131 @@ void main() {
     expect(_successValue(result).title, isNull);
   });
 
+  test('连续新建笔记会追加到同一书章节末尾', () async {
+    final first = _successValue(
+      await repository.create(subjectId: 'book', title: '第一条'),
+    );
+    final second = _successValue(
+      await repository.create(subjectId: 'book', title: '第二条'),
+    );
+
+    expect((first.sortOrder, second.sortOrder), (0, 1));
+    expect(
+      _successValue(
+        await repository.listBySubject('book'),
+      ).map((note) => (note.id, note.sortOrder)),
+      [(first.id, 0), (second.id, 1)],
+    );
+  });
+
+  test('按书章节读取在顺序重复时按创建时间与 id 稳定排序', () async {
+    await _insertNote(db, id: 'note-b', sortOrder: 2, createdAt: 20);
+    await _insertNote(db, id: 'note-c', sortOrder: 2, createdAt: 10);
+    await _insertNote(db, id: 'note-a', sortOrder: 2, createdAt: 10);
+
+    expect(
+      _successValue(
+        await repository.listBySubject('book'),
+      ).map((note) => note.id),
+      ['note-a', 'note-c', 'note-b'],
+    );
+  });
+
+  test('笔记可按完整同级列表重排', () async {
+    await _insertNote(db, id: 'note-a', sortOrder: 0);
+    await _insertNote(db, id: 'note-b', sortOrder: 1);
+    await _insertNote(db, id: 'note-c', sortOrder: 2);
+
+    final result = await repository.reorderNotes(
+      subjectId: 'book',
+      orderedIds: const ['note-c', 'note-a', 'note-b'],
+    );
+
+    expect(result, isA<Success<void>>());
+    expect(
+      _successValue(
+        await repository.listBySubject('book'),
+      ).map((note) => (note.id, note.sortOrder)),
+      [('note-c', 0), ('note-a', 1), ('note-b', 2)],
+    );
+  });
+
+  test('笔记可跨书章节准确插入并连续重排来源与目标', () async {
+    await _insertSubject(db, id: 'chapter', level: 1);
+    await _insertNote(db, id: 'source-a', sortOrder: 0);
+    await _insertNote(db, id: 'moving', sortOrder: 1);
+    await _insertNote(db, id: 'source-b', sortOrder: 2);
+    await _insertNote(db, id: 'target-a', subjectId: 'chapter', sortOrder: 0);
+    await _insertNote(db, id: 'target-b', subjectId: 'chapter', sortOrder: 1);
+
+    final result = await repository.moveNote(
+      noteId: 'moving',
+      subjectId: 'chapter',
+      targetIndex: 1,
+    );
+
+    expect(result, isA<Success<void>>());
+    expect(
+      _successValue(
+        await repository.listBySubject('book'),
+      ).map((note) => (note.id, note.sortOrder)),
+      [('source-a', 0), ('source-b', 1)],
+    );
+    expect(
+      _successValue(
+        await repository.listBySubject('chapter'),
+      ).map((note) => (note.id, note.sortOrder)),
+      [('target-a', 0), ('moving', 1), ('target-b', 2)],
+    );
+  });
+
+  test('非法重排和越界移动会失败并保持原位置', () async {
+    await _insertSubject(db, id: 'chapter', level: 1);
+    await _insertNote(db, id: 'note-a', sortOrder: 0);
+    await _insertNote(db, id: 'note-b', sortOrder: 1);
+
+    final invalidOrder = await repository.reorderNotes(
+      subjectId: 'book',
+      orderedIds: const ['note-a', 'note-a'],
+    );
+    final outOfRange = await repository.moveNote(
+      noteId: 'note-a',
+      subjectId: 'chapter',
+      targetIndex: 1,
+    );
+
+    for (final result in [invalidOrder, outOfRange]) {
+      expect(result, isA<Failure<void>>());
+      expect((result as Failure<void>).exception, isA<ValidationException>());
+    }
+    expect(
+      _successValue(
+        await repository.listBySubject('book'),
+      ).map((note) => (note.id, note.sortOrder)),
+      [('note-a', 0), ('note-b', 1)],
+    );
+    expect(_successValue(await repository.listBySubject('chapter')), isEmpty);
+  });
+
+  test('菜单重命名只改标题不建版本，正文更新仍建立版本', () async {
+    final note = _successValue(
+      await repository.create(
+        subjectId: 'book',
+        title: '旧标题',
+        contentJson: _delta([_op('旧正文')]),
+      ),
+    );
+
+    final rename = await repository.renameTitle(id: note.id, title: '  新标题  ');
+
+    expect(rename, isA<Success<void>>());
+    expect((_successValue(await repository.getById(note.id)))!.title, '新标题');
+    expect(_successValue(await repository.listVersions(note.id)), isEmpty);
+
+    await repository.update(id: note.id, contentJson: _delta([_op('新正文')]));
+    expect(_successValue(await repository.listVersions(note.id)), hasLength(1));
+  });
+
   test('更新正文会重建重点并保存旧正文版本', () async {
     final oldContent = _delta([_op('旧红字', color: 'red')]);
     final newContent = _delta([_op('新下划线', underline: true)]);
@@ -627,6 +752,42 @@ void main() {
       [versionA.id],
     );
   });
+}
+
+Future<void> _insertNote(
+  AppDatabase db, {
+  required String id,
+  String subjectId = 'book',
+  int sortOrder = 0,
+  int createdAt = 1,
+}) {
+  return db.noteDao.insertNote(
+    NotesCompanion(
+      id: Value(id),
+      subjectId: Value(subjectId),
+      title: Value(id),
+      plainText: const Value(''),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(createdAt),
+    ),
+  );
+}
+
+Future<void> _insertSubject(
+  AppDatabase db, {
+  required String id,
+  required int level,
+}) {
+  return db.subjectDao.insertSubject(
+    SubjectsCompanion(
+      id: Value(id),
+      name: Value(id),
+      level: Value(level),
+      createdAt: const Value(1),
+      updatedAt: const Value(1),
+    ),
+  );
 }
 
 String _delta(List<Map<String, Object>> operations) => jsonEncode(operations);

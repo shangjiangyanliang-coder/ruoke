@@ -13,6 +13,9 @@ abstract class NoteRepository {
   /// 列出全部未软删笔记（第2批无分级，先全列；第3批改成 listBySubject）。
   Future<Result<List<Note>>> listAll();
 
+  /// 按书、章或节列出直属笔记，使用目录显示顺序。
+  Future<Result<List<Note>>> listBySubject(String subjectId);
+
   /// 按 id 取一条。
   Future<Result<Note?>> getById(String id);
 
@@ -38,6 +41,22 @@ abstract class NoteRepository {
     String? plainText,
     bool? isDraft,
     Iterable<String>? tagNames,
+  });
+
+  /// 菜单重命名只更新标题元数据，不创建历史版本。
+  Future<Result<void>> renameTitle({required String id, required String title});
+
+  /// 将笔记移动到目标书章节并插入指定位置。
+  Future<Result<void>> moveNote({
+    required String noteId,
+    required String subjectId,
+    required int targetIndex,
+  });
+
+  /// 按完整 id 列表重排一个书章节内的直属笔记。
+  Future<Result<void>> reorderNotes({
+    required String subjectId,
+    required List<String> orderedIds,
   });
 
   /// 软删笔记。

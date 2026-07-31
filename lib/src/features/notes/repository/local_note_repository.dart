@@ -45,6 +45,15 @@ class LocalNoteRepository implements NoteRepository {
   );
 
   @override
+  Future<Result<List<Note>>> listBySubject(String subjectId) => guard(
+    () async =>
+        (await _noteDao.listBySubject(subjectId)).map(Note.fromEntity).toList(),
+    orElse: (e) => const Failure(
+      DatabaseException('读取直属笔记失败', techDetail: 'listBySubject'),
+    ),
+  );
+
+  @override
   Future<Result<Note?>> getById(String id) => guard(
     () async {
       final e = await _noteDao.getById(id);
@@ -124,7 +133,10 @@ class LocalNoteRepository implements NoteRepository {
       return _descendantSubjectIds(
         subjects,
         subjects
-            .where((subject) => subject.level == 0 && folderIds.contains(subject.folderId))
+            .where(
+              (subject) =>
+                  subject.level == 0 && folderIds.contains(subject.folderId),
+            )
             .map((subject) => subject.id),
       );
     }
@@ -177,6 +189,7 @@ class LocalNoteRepository implements NoteRepository {
       // plain_text 由 contentJson 派生（UI 不用关心）；外部显式传 plainText 时优先用
       final derivedPlain = plainText ?? deltaJsonToPlainText(contentJson);
       return _db.transaction(() async {
+        final siblings = await _noteDao.listBySubject(subjectId);
         await _noteDao.insertNote(
           NotesCompanion(
             id: Value(id),
@@ -185,6 +198,7 @@ class LocalNoteRepository implements NoteRepository {
             contentJson: Value(contentJson),
             plainText: Value(derivedPlain),
             isDraft: Value(isDraft),
+            sortOrder: Value(_nextOrder(siblings)),
             createdAt: Value(now),
             updatedAt: Value(now),
           ),
@@ -271,6 +285,95 @@ class LocalNoteRepository implements NoteRepository {
     },
     orElse: (e) =>
         const Failure(DatabaseException('保存笔记失败', techDetail: 'update')),
+  );
+
+  @override
+  Future<Result<void>> renameTitle({
+    required String id,
+    required String title,
+  }) => _transaction(
+    userMessage: '重命名笔记失败',
+    techDetail: 'renameTitle',
+    action: () async {
+      final note = await _noteDao.getById(id);
+      if (note == null || note.isDeleted) {
+        throw const ValidationException('笔记不存在或已删除');
+      }
+      final normalized = title.trim();
+      final changed = await _noteDao.renameTitle(
+        id,
+        normalized.isEmpty ? null : normalized,
+        nowMs(),
+      );
+      if (changed != 1) {
+        throw const ValidationException('笔记已发生变化，请刷新后重试');
+      }
+    },
+  );
+
+  @override
+  Future<Result<void>> moveNote({
+    required String noteId,
+    required String subjectId,
+    required int targetIndex,
+  }) => _transaction(
+    userMessage: '移动笔记失败',
+    techDetail: 'moveNote',
+    action: () async {
+      final moving = await _noteDao.getById(noteId);
+      if (moving == null || moving.isDeleted) {
+        throw const ValidationException('笔记不存在或已删除');
+      }
+      final targetSubject = await _db.subjectDao.getById(subjectId);
+      if (targetSubject == null || targetSubject.isDeleted) {
+        throw const ValidationException('目标书章节不存在或已删除');
+      }
+
+      final source = await _noteDao.listBySubject(moving.subjectId);
+      final target = moving.subjectId == subjectId
+          ? source
+          : await _noteDao.listBySubject(subjectId);
+      final sourceIds = source.map((note) => note.id).toList();
+      if (!sourceIds.remove(noteId)) {
+        throw const ValidationException('笔记列表已变化，请刷新后重试');
+      }
+      final targetIds = target
+          .map((note) => note.id)
+          .where((id) => id != noteId)
+          .toList();
+      _validateTargetIndex(targetIndex, targetIds.length);
+      targetIds.insert(targetIndex, noteId);
+
+      if (moving.subjectId != subjectId) {
+        await _writeOrder(sourceIds);
+      }
+      final changed = await _noteDao.updateSubjectAndOrder(
+        noteId,
+        subjectId,
+        targetIndex,
+      );
+      if (changed != 1) {
+        throw const ValidationException('笔记已发生变化，请刷新后重试');
+      }
+      await _writeOrder(targetIds);
+    },
+  );
+
+  @override
+  Future<Result<void>> reorderNotes({
+    required String subjectId,
+    required List<String> orderedIds,
+  }) => _transaction(
+    userMessage: '调整笔记顺序失败',
+    techDetail: 'reorderNotes',
+    action: () async {
+      final actual = await _noteDao.listBySubject(subjectId);
+      _validateExactOrder(
+        actualIds: actual.map((note) => note.id).toList(),
+        orderedIds: orderedIds,
+      );
+      await _writeOrder(orderedIds);
+    },
   );
 
   @override
@@ -418,6 +521,52 @@ class LocalNoteRepository implements NoteRepository {
             DatabaseException('重命名历史版本失败', techDetail: 'renameVersion'),
           ),
   );
+
+  /// 在单一数据库事务内完成目录元数据校验与写入。
+  Future<Result<T>> _transaction<T>({
+    required String userMessage,
+    required String techDetail,
+    required Future<T> Function() action,
+  }) async {
+    try {
+      return Success(await _db.transaction(action));
+    } on AppException catch (error) {
+      return Failure(error);
+    } catch (_) {
+      return Failure(DatabaseException(userMessage, techDetail: techDetail));
+    }
+  }
+
+  int _nextOrder(List<NoteEntity> siblings) => siblings.fold(
+    0,
+    (next, note) => note.sortOrder >= next ? note.sortOrder + 1 : next,
+  );
+
+  void _validateExactOrder({
+    required List<String> actualIds,
+    required List<String> orderedIds,
+  }) {
+    if (orderedIds.length != orderedIds.toSet().length ||
+        actualIds.length != orderedIds.length ||
+        !actualIds.toSet().containsAll(orderedIds)) {
+      throw const ValidationException('列表内容已变化，请刷新后重试');
+    }
+  }
+
+  void _validateTargetIndex(int targetIndex, int targetLength) {
+    if (targetIndex < 0 || targetIndex > targetLength) {
+      throw const ValidationException('插入位置已变化，请刷新后重试');
+    }
+  }
+
+  Future<void> _writeOrder(List<String> orderedIds) async {
+    for (var index = 0; index < orderedIds.length; index++) {
+      final changed = await _noteDao.updateSortOrder(orderedIds[index], index);
+      if (changed != 1) {
+        throw const ValidationException('笔记列表已变化，请刷新后重试');
+      }
+    }
+  }
 
   Future<void> _saveVersion({
     required String noteId,

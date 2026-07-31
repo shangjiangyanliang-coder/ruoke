@@ -101,7 +101,12 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
   Future<List<NoteEntity>> listBySubject(String subjectId) {
     return (select(notes)
           ..where((n) => n.subjectId.equals(subjectId))
-          ..where((n) => n.isDeleted.equals(false)))
+          ..where((n) => n.isDeleted.equals(false))
+          ..orderBy([
+            (n) => OrderingTerm.asc(n.sortOrder),
+            (n) => OrderingTerm.asc(n.createdAt),
+            (n) => OrderingTerm.asc(n.id),
+          ]))
         .get();
   }
 
@@ -109,6 +114,27 @@ class NoteDao extends DatabaseAccessor<AppDatabase> with _$NoteDaoMixin {
   Future<NoteEntity?> getById(String id) {
     return (select(notes)..where((n) => n.id.equals(id))).getSingleOrNull();
   }
+
+  /// 仅更新菜单重命名所需的标题元数据，不触发历史快照。
+  Future<int> renameTitle(String id, String? title, int updatedAt) =>
+      (update(notes)..where((note) => note.id.equals(id))).write(
+        NotesCompanion(title: Value(title), updatedAt: Value(updatedAt)),
+      );
+
+  /// 同时更新笔记归属与目标顺序；移动不改变编辑更新时间。
+  Future<int> updateSubjectAndOrder(
+    String id,
+    String subjectId,
+    int sortOrder,
+  ) => (update(notes)..where((note) => note.id.equals(id))).write(
+    NotesCompanion(subjectId: Value(subjectId), sortOrder: Value(sortOrder)),
+  );
+
+  /// 更新笔记在同一书章节内的显示顺序。
+  Future<int> updateSortOrder(String id, int sortOrder) =>
+      (update(notes)..where((note) => note.id.equals(id))).write(
+        NotesCompanion(sortOrder: Value(sortOrder)),
+      );
 
   /// 更新笔记的可变字段。只写非 absent 的字段。
   Future<int> updateNote(
