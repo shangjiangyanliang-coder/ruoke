@@ -26,7 +26,11 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
   Future<List<SubjectEntity>> listAll() {
     return (select(subjects)
           ..where((s) => s.isDeleted.equals(false))
-          ..orderBy([(s) => OrderingTerm.asc(s.sortOrder)]))
+          ..orderBy([
+            (s) => OrderingTerm.asc(s.sortOrder),
+            (s) => OrderingTerm.asc(s.createdAt),
+            (s) => OrderingTerm.asc(s.id),
+          ]))
         .get();
   }
 
@@ -34,7 +38,11 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
   Future<List<SubjectEntity>> childrenOf(String? parentId) {
     final query = select(subjects)
       ..where((s) => s.isDeleted.equals(false))
-      ..orderBy([(s) => OrderingTerm.asc(s.sortOrder)]);
+      ..orderBy([
+        (s) => OrderingTerm.asc(s.sortOrder),
+        (s) => OrderingTerm.asc(s.createdAt),
+        (s) => OrderingTerm.asc(s.id),
+      ]);
     if (parentId == null) {
       query.where((s) => s.parentId.isNull());
     } else {
@@ -82,13 +90,33 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
     );
   }
 
-  /// 更新书的文件夹归属与更新时间。
+  /// 同时更新书的文件夹归属、目标顺序与更新时间。
+  Future<int> updateBookFolderAndOrder(
+    String id,
+    String? folderId,
+    int sortOrder,
+    int updatedAt,
+  ) => (update(subjects)..where((subject) => subject.id.equals(id))).write(
+    SubjectsCompanion(
+      folderId: Value(folderId),
+      sortOrder: Value(sortOrder),
+      updatedAt: Value(updatedAt),
+    ),
+  );
+
+  /// 兼容只调整书归属的既有调用；新移动流程应同时写入目标顺序。
   Future<int> updateFolder(String id, String? folderId, int updatedAt) =>
       (update(subjects)..where((subject) => subject.id.equals(id))).write(
         SubjectsCompanion(
           folderId: Value(folderId),
           updatedAt: Value(updatedAt),
         ),
+      );
+
+  /// 更新书、章或节在同级同类列表中的顺序。
+  Future<int> updateSubjectSortOrder(String id, int sortOrder) =>
+      (update(subjects)..where((subject) => subject.id.equals(id))).write(
+        SubjectsCompanion(sortOrder: Value(sortOrder)),
       );
 
   /// 统计未软删子节点数（判叶/判空用）。parentId 为 null 时数顶层。

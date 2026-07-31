@@ -23,28 +23,48 @@ class FolderDao extends DatabaseAccessor<AppDatabase> with _$FolderDaoMixin {
         SubjectFoldersCompanion(name: Value(name), updatedAt: Value(updatedAt)),
       );
 
-  /// 更新文件夹父目录与更新时间。
-  Future<int> move(String id, String? parentId, int updatedAt) =>
+  /// 同时更新文件夹父目录、目标顺序与更新时间。
+  Future<int> updateFolderParentAndOrder(
+    String id,
+    String? parentId,
+    int sortOrder,
+    int updatedAt,
+  ) => (update(subjectFolders)..where((folder) => folder.id.equals(id))).write(
+    SubjectFoldersCompanion(
+      parentId: Value(parentId),
+      sortOrder: Value(sortOrder),
+      updatedAt: Value(updatedAt),
+    ),
+  );
+
+  /// 更新文件夹在同级列表中的顺序。
+  Future<int> updateFolderSortOrder(String id, int sortOrder) =>
       (update(subjectFolders)..where((folder) => folder.id.equals(id))).write(
-        SubjectFoldersCompanion(
-          parentId: Value(parentId),
-          updatedAt: Value(updatedAt),
-        ),
+        SubjectFoldersCompanion(sortOrder: Value(sortOrder)),
       );
 
   /// 读取全部活动文件夹，用于移动前的循环关系校验。
   Future<List<SubjectFolderEntity>> listAll() =>
       (select(subjectFolders)
             ..where((folder) => folder.isDeleted.equals(false))
-            ..orderBy([(folder) => OrderingTerm.asc(folder.sortOrder)]))
+            ..orderBy([
+              (folder) => OrderingTerm.asc(folder.sortOrder),
+              (folder) => OrderingTerm.asc(folder.createdAt),
+              (folder) => OrderingTerm.asc(folder.id),
+            ]))
           .get();
 
   /// 按文件夹读取直属书；null 表示根目录未归类书。
   Future<List<SubjectEntity>> booksIn(String? folderId) {
     final query = select(subjects)
-      ..where((subject) =>
-          subject.isDeleted.equals(false) & subject.level.equals(0))
-      ..orderBy([(subject) => OrderingTerm.asc(subject.sortOrder)]);
+      ..where(
+        (subject) => subject.isDeleted.equals(false) & subject.level.equals(0),
+      )
+      ..orderBy([
+        (subject) => OrderingTerm.asc(subject.sortOrder),
+        (subject) => OrderingTerm.asc(subject.createdAt),
+        (subject) => OrderingTerm.asc(subject.id),
+      ]);
     if (folderId == null) {
       query.where((subject) => subject.folderId.isNull());
     } else {
@@ -57,7 +77,11 @@ class FolderDao extends DatabaseAccessor<AppDatabase> with _$FolderDaoMixin {
   Future<List<SubjectFolderEntity>> childrenOf(String? parentId) {
     final query = select(subjectFolders)
       ..where((folder) => folder.isDeleted.equals(false))
-      ..orderBy([(folder) => OrderingTerm.asc(folder.sortOrder)]);
+      ..orderBy([
+        (folder) => OrderingTerm.asc(folder.sortOrder),
+        (folder) => OrderingTerm.asc(folder.createdAt),
+        (folder) => OrderingTerm.asc(folder.id),
+      ]);
     if (parentId == null) {
       query.where((folder) => folder.parentId.isNull());
     } else {
@@ -68,11 +92,9 @@ class FolderDao extends DatabaseAccessor<AppDatabase> with _$FolderDaoMixin {
 
   /// 按 id 读取活动文件夹，用于校验父目录存在性。
   Future<SubjectFolderEntity?> getActiveById(String id) =>
-      (select(subjectFolders)
-            ..where(
-              (folder) =>
-                  folder.id.equals(id) & folder.isDeleted.equals(false),
-            ))
+      (select(subjectFolders)..where(
+            (folder) => folder.id.equals(id) & folder.isDeleted.equals(false),
+          ))
           .getSingleOrNull();
 
   /// 查找同一父目录下名称相同且未删除的文件夹。
@@ -82,8 +104,7 @@ class FolderDao extends DatabaseAccessor<AppDatabase> with _$FolderDaoMixin {
   ) {
     final query = select(subjectFolders)
       ..where(
-        (folder) =>
-            folder.isDeleted.equals(false) & folder.name.equals(name),
+        (folder) => folder.isDeleted.equals(false) & folder.name.equals(name),
       );
     if (parentId == null) {
       query.where((folder) => folder.parentId.isNull());

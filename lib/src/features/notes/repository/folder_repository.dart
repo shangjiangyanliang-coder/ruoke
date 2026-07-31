@@ -22,12 +22,26 @@ abstract class FolderRepository {
   Future<Result<void>> moveFolder({
     required String folderId,
     required String? newParentId,
+    required int targetIndex,
+  });
+
+  /// 按完整 id 列表重排一个父目录下的直属文件夹。
+  Future<Result<void>> reorderFolders({
+    required String? parentId,
+    required List<String> orderedIds,
   });
 
   /// 将书移动至文件夹；null 表示移回未归类书。
   Future<Result<void>> moveBook({
     required String bookId,
     required String? folderId,
+    required int targetIndex,
+  });
+
+  /// 按完整 id 列表重排一个文件夹内的直属书。
+  Future<Result<void>> reorderBooks({
+    required String? folderId,
+    required List<String> orderedIds,
   });
 
   /// 解散文件夹，将直属内容安全上移后软删除该文件夹。
