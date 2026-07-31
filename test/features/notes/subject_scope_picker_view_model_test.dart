@@ -158,8 +158,26 @@ class _SubjectRepositoryFake implements SubjectRepository {
     required int level,
     String? parentId,
     String? folderId,
-    int sortOrder = 0,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Result<void>> rename({
+    required String id,
+    required String name,
+  }) async => const Success<void>(null);
+
+  @override
+  Future<Result<void>> moveSubject({
+    required String subjectId,
+    required String newParentId,
+    required int targetIndex,
+  }) async => const Success<void>(null);
+
+  @override
+  Future<Result<void>> reorderChildren({
+    required String parentId,
+    required List<String> orderedIds,
+  }) async => const Success<void>(null);
 
   @override
   Future<Result<void>> softDelete(String id) => throw UnimplementedError();

@@ -36,15 +36,9 @@ class SubjectManageVm extends AsyncNotifier<SubjectManageState> {
     required int level,
     String? parentId,
   }) async {
-    // sortOrder 默认同级最大+1，简化为取同级数作 order
-    final siblings = await ref.read(subjectRepositoryProvider).childrenOf(parentId);
-    final order = siblings is Success<List<Subject>> ? siblings.value.length : 0;
-    final r = await ref.read(subjectRepositoryProvider).create(
-          name: name,
-          level: level,
-          parentId: parentId,
-          sortOrder: order,
-        );
+    final r = await ref
+        .read(subjectRepositoryProvider)
+        .create(name: name, level: level, parentId: parentId);
     if (r is Success<String>) {
       await _reload();
       return r.value;

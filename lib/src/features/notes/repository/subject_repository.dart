@@ -21,13 +21,28 @@ abstract class SubjectRepository {
   /// 按 id 取一条。
   Future<Result<Subject?>> getById(String id);
 
-  /// 新建科目节点（返回新 id）。level/sortOrder/parentId 由调用方定。
+  /// 新建科目节点（返回新 id），顺序由仓储按真实父级追加。
   Future<Result<String>> create({
     required String name,
     required int level,
     String? parentId,
     String? folderId,
-    int sortOrder = 0,
+  });
+
+  /// 重命名书、章或节，不改变层级和归属。
+  Future<Result<void>> rename({required String id, required String name});
+
+  /// 将章或节移动到合法父级并插入指定位置。
+  Future<Result<void>> moveSubject({
+    required String subjectId,
+    required String newParentId,
+    required int targetIndex,
+  });
+
+  /// 按完整 id 列表重排一个书或章的直属子级。
+  Future<Result<void>> reorderChildren({
+    required String parentId,
+    required List<String> orderedIds,
   });
 
   /// 软删科目节点。

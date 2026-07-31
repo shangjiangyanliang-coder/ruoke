@@ -80,6 +80,12 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
     return (select(subjects)..where((s) => s.id.equals(id))).getSingleOrNull();
   }
 
+  /// 更新书、章或节名称与更新时间。
+  Future<int> rename(String id, String name, int updatedAt) =>
+      (update(subjects)..where((subject) => subject.id.equals(id))).write(
+        SubjectsCompanion(name: Value(name), updatedAt: Value(updatedAt)),
+      );
+
   /// 软删：置 isDeleted=true + deletedAt=nowMs。
   Future<int> softDelete(String id, int deletedAtMs) {
     return (update(subjects)..where((s) => s.id.equals(id))).write(
@@ -118,6 +124,20 @@ class SubjectDao extends DatabaseAccessor<AppDatabase> with _$SubjectDaoMixin {
       (update(subjects)..where((subject) => subject.id.equals(id))).write(
         SubjectsCompanion(sortOrder: Value(sortOrder)),
       );
+
+  /// 同时更新章或节的父级、目标顺序与更新时间。
+  Future<int> updateParentAndOrder(
+    String id,
+    String parentId,
+    int sortOrder,
+    int updatedAt,
+  ) => (update(subjects)..where((subject) => subject.id.equals(id))).write(
+    SubjectsCompanion(
+      parentId: Value(parentId),
+      sortOrder: Value(sortOrder),
+      updatedAt: Value(updatedAt),
+    ),
+  );
 
   /// 统计未软删子节点数（判叶/判空用）。parentId 为 null 时数顶层。
   Future<int> countChildren(String? parentId) async {

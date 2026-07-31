@@ -92,28 +92,205 @@ class LocalSubjectRepository implements SubjectRepository {
     required int level,
     String? parentId,
     String? folderId,
-    int sortOrder = 0,
-  }) => guard(
-    () async {
-      final now = nowMs();
-      final id = newId();
-      await _dao.insertSubject(
-        SubjectsCompanion(
-          id: Value(id),
-          parentId: Value(parentId),
-          folderId: Value(folderId),
-          name: Value(name),
-          level: Value(level),
-          sortOrder: Value(sortOrder),
-          createdAt: Value(now),
-          updatedAt: Value(now),
-        ),
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      return const Failure(ValidationException('名称不能为空'));
+    }
+    return _transaction(
+      userMessage: '新建科目失败',
+      techDetail: 'create',
+      action: () async {
+        if (level < 0 || level > 2) {
+          throw const ValidationException('层级不正确');
+        }
+
+        late final int sortOrder;
+        if (level == 0) {
+          if (parentId != null) {
+            throw const ValidationException('书不能设置上级书章节');
+          }
+          if (folderId != null &&
+              await _db.folderDao.getActiveById(folderId) == null) {
+            throw const ValidationException('目标文件夹不存在或已删除');
+          }
+          sortOrder = _nextOrder(await _db.folderDao.booksIn(folderId));
+        } else {
+          if (folderId != null || parentId == null) {
+            throw const ValidationException('章或节必须设置正确父级');
+          }
+          final parent = await _dao.getById(parentId);
+          if (parent == null || parent.isDeleted || parent.level != level - 1) {
+            throw const ValidationException('目标父级不存在或层级不正确');
+          }
+          sortOrder = _nextOrder(await _dao.childrenOf(parentId));
+        }
+
+        final now = nowMs();
+        final id = newId();
+        await _dao.insertSubject(
+          SubjectsCompanion(
+            id: Value(id),
+            parentId: Value(level == 0 ? null : parentId),
+            folderId: Value(level == 0 ? folderId : null),
+            name: Value(normalizedName),
+            level: Value(level),
+            sortOrder: Value(sortOrder),
+            createdAt: Value(now),
+            updatedAt: Value(now),
+          ),
+        );
+        return id;
+      },
+    );
+  }
+
+  @override
+  Future<Result<void>> rename({
+    required String id,
+    required String name,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      return const Failure(ValidationException('名称不能为空'));
+    }
+    return _transaction(
+      userMessage: '重命名失败',
+      techDetail: 'renameSubject',
+      action: () async {
+        final subject = await _dao.getById(id);
+        if (subject == null || subject.isDeleted) {
+          throw const ValidationException('书章节不存在或已删除');
+        }
+        final changed = await _dao.rename(id, normalizedName, nowMs());
+        if (changed != 1) {
+          throw const ValidationException('书章节已发生变化，请刷新后重试');
+        }
+      },
+    );
+  }
+
+  @override
+  Future<Result<void>> moveSubject({
+    required String subjectId,
+    required String newParentId,
+    required int targetIndex,
+  }) => _transaction(
+    userMessage: '移动章节目失败',
+    techDetail: 'moveSubject',
+    action: () async {
+      final moving = await _dao.getById(subjectId);
+      if (moving == null || moving.isDeleted || moving.level == 0) {
+        throw const ValidationException('只能移动未删除的章或节');
+      }
+      final targetParent = await _dao.getById(newParentId);
+      if (targetParent == null || targetParent.isDeleted) {
+        throw const ValidationException('目标父级不存在或已删除');
+      }
+      if (targetParent.level != moving.level - 1) {
+        throw const ValidationException('目标层级不正确');
+      }
+
+      final source = await _dao.childrenOf(moving.parentId);
+      final target = moving.parentId == newParentId
+          ? source
+          : await _dao.childrenOf(newParentId);
+      final sourceIds = source.map((subject) => subject.id).toList();
+      if (!sourceIds.remove(subjectId)) {
+        throw const ValidationException('章节目列表已变化，请刷新后重试');
+      }
+      final targetIds = target
+          .map((subject) => subject.id)
+          .where((id) => id != subjectId)
+          .toList();
+      _validateTargetIndex(targetIndex, targetIds.length);
+      targetIds.insert(targetIndex, subjectId);
+
+      if (moving.parentId != newParentId) {
+        await _writeOrder(sourceIds);
+      }
+      final changed = await _dao.updateParentAndOrder(
+        subjectId,
+        newParentId,
+        targetIndex,
+        nowMs(),
       );
-      return id;
+      if (changed != 1) {
+        throw const ValidationException('章节目已发生变化，请刷新后重试');
+      }
+      await _writeOrder(targetIds);
     },
-    orElse: (e) =>
-        const Failure(DatabaseException('新建科目失败', techDetail: 'create')),
   );
+
+  @override
+  Future<Result<void>> reorderChildren({
+    required String parentId,
+    required List<String> orderedIds,
+  }) => _transaction(
+    userMessage: '调整章节目顺序失败',
+    techDetail: 'reorderChildren',
+    action: () async {
+      final parent = await _dao.getById(parentId);
+      if (parent == null || parent.isDeleted || parent.level >= 2) {
+        throw const ValidationException('目标父级不存在或层级不正确');
+      }
+      final actual = await _dao.childrenOf(parentId);
+      _validateExactOrder(
+        actualIds: actual.map((subject) => subject.id).toList(),
+        orderedIds: orderedIds,
+      );
+      await _writeOrder(orderedIds);
+    },
+  );
+
+  /// 在单一数据库事务内完成校验与写入，并保留领域校验错误。
+  Future<Result<T>> _transaction<T>({
+    required String userMessage,
+    required String techDetail,
+    required Future<T> Function() action,
+  }) async {
+    try {
+      return Success(await _db.transaction(action));
+    } on AppException catch (error) {
+      return Failure(error);
+    } catch (_) {
+      return Failure(DatabaseException(userMessage, techDetail: techDetail));
+    }
+  }
+
+  int _nextOrder(List<SubjectEntity> siblings) => siblings.fold(
+    0,
+    (next, subject) => subject.sortOrder >= next ? subject.sortOrder + 1 : next,
+  );
+
+  void _validateExactOrder({
+    required List<String> actualIds,
+    required List<String> orderedIds,
+  }) {
+    if (orderedIds.length != orderedIds.toSet().length ||
+        actualIds.length != orderedIds.length ||
+        !actualIds.toSet().containsAll(orderedIds)) {
+      throw const ValidationException('列表内容已变化，请刷新后重试');
+    }
+  }
+
+  void _validateTargetIndex(int targetIndex, int targetLength) {
+    if (targetIndex < 0 || targetIndex > targetLength) {
+      throw const ValidationException('插入位置已变化，请刷新后重试');
+    }
+  }
+
+  Future<void> _writeOrder(List<String> orderedIds) async {
+    for (var index = 0; index < orderedIds.length; index++) {
+      final changed = await _dao.updateSubjectSortOrder(
+        orderedIds[index],
+        index,
+      );
+      if (changed != 1) {
+        throw const ValidationException('章节目列表已变化，请刷新后重试');
+      }
+    }
+  }
 
   @override
   Future<Result<void>> softDelete(String id) => guard(
