@@ -16,6 +16,7 @@ import 'repository/local_tag_repository.dart';
 import 'repository/note_repository.dart';
 import 'repository/subject_repository.dart';
 import 'repository/tag_repository.dart';
+import 'view_model/library_organization_controller.dart';
 
 /// 数据库单例 Provider（全项目共享）。后续抽到 data/ 全局，暂放笔记模块。
 final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -48,3 +49,15 @@ final Provider<TagRepository> tagRepositoryProvider = Provider<TagRepository>((
 ) {
   return LocalTagRepository(ref.watch(appDatabaseProvider));
 });
+
+/// 目录排序与移动控制器：只依赖仓储接口，供排序页和移动页复用。
+final Provider<LibraryOrganizationController>
+libraryOrganizationControllerProvider = Provider<LibraryOrganizationController>(
+  (ref) {
+    return LibraryOrganizationController(
+      folders: ref.watch(folderRepositoryProvider),
+      subjects: ref.watch(subjectRepositoryProvider),
+      notes: ref.watch(noteRepositoryProvider),
+    );
+  },
+);
