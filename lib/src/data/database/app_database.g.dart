@@ -1275,6 +1275,18 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, NoteEntity> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1335,6 +1347,7 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, NoteEntity> {
     sourceType,
     sourceRef,
     lastReadAt,
+    sortOrder,
     createdAt,
     updatedAt,
     isDeleted,
@@ -1422,6 +1435,12 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, NoteEntity> {
         ),
       );
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1499,6 +1518,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, NoteEntity> {
         DriftSqlType.int,
         data['${effectivePrefix}last_read_at'],
       ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -1555,6 +1578,9 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
   /// F1.19 续学用
   final int? lastReadAt;
 
+  /// 同一书、章或节内的显示顺序。
+  final int sortOrder;
+
   /// 创建时间（毫秒）
   final int createdAt;
 
@@ -1577,6 +1603,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
     this.sourceType,
     this.sourceRef,
     this.lastReadAt,
+    required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
     required this.isDeleted,
@@ -1605,6 +1632,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
     if (!nullToAbsent || lastReadAt != null) {
       map['last_read_at'] = Variable<int>(lastReadAt);
     }
+    map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -1636,6 +1664,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
       lastReadAt: lastReadAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastReadAt),
+      sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       isDeleted: Value(isDeleted),
@@ -1661,6 +1690,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
       sourceType: serializer.fromJson<String?>(json['sourceType']),
       sourceRef: serializer.fromJson<String?>(json['sourceRef']),
       lastReadAt: serializer.fromJson<int?>(json['lastReadAt']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
@@ -1681,6 +1711,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
       'sourceType': serializer.toJson<String?>(sourceType),
       'sourceRef': serializer.toJson<String?>(sourceRef),
       'lastReadAt': serializer.toJson<int?>(lastReadAt),
+      'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -1699,6 +1730,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
     Value<String?> sourceType = const Value.absent(),
     Value<String?> sourceRef = const Value.absent(),
     Value<int?> lastReadAt = const Value.absent(),
+    int? sortOrder,
     int? createdAt,
     int? updatedAt,
     bool? isDeleted,
@@ -1714,6 +1746,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
     sourceType: sourceType.present ? sourceType.value : this.sourceType,
     sourceRef: sourceRef.present ? sourceRef.value : this.sourceRef,
     lastReadAt: lastReadAt.present ? lastReadAt.value : this.lastReadAt,
+    sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
@@ -1739,6 +1772,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
       lastReadAt: data.lastReadAt.present
           ? data.lastReadAt.value
           : this.lastReadAt,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
@@ -1759,6 +1793,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
           ..write('sourceType: $sourceType, ')
           ..write('sourceRef: $sourceRef, ')
           ..write('lastReadAt: $lastReadAt, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
@@ -1779,6 +1814,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
     sourceType,
     sourceRef,
     lastReadAt,
+    sortOrder,
     createdAt,
     updatedAt,
     isDeleted,
@@ -1798,6 +1834,7 @@ class NoteEntity extends DataClass implements Insertable<NoteEntity> {
           other.sourceType == this.sourceType &&
           other.sourceRef == this.sourceRef &&
           other.lastReadAt == this.lastReadAt &&
+          other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.isDeleted == this.isDeleted &&
@@ -1815,6 +1852,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
   final Value<String?> sourceType;
   final Value<String?> sourceRef;
   final Value<int?> lastReadAt;
+  final Value<int> sortOrder;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<bool> isDeleted;
@@ -1831,6 +1869,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
     this.sourceType = const Value.absent(),
     this.sourceRef = const Value.absent(),
     this.lastReadAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
@@ -1848,6 +1887,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
     this.sourceType = const Value.absent(),
     this.sourceRef = const Value.absent(),
     this.lastReadAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.isDeleted = const Value.absent(),
@@ -1868,6 +1908,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
     Expression<String>? sourceType,
     Expression<String>? sourceRef,
     Expression<int>? lastReadAt,
+    Expression<int>? sortOrder,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<bool>? isDeleted,
@@ -1885,6 +1926,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
       if (sourceType != null) 'source_type': sourceType,
       if (sourceRef != null) 'source_ref': sourceRef,
       if (lastReadAt != null) 'last_read_at': lastReadAt,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
@@ -1904,6 +1946,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
     Value<String?>? sourceType,
     Value<String?>? sourceRef,
     Value<int?>? lastReadAt,
+    Value<int>? sortOrder,
     Value<int>? createdAt,
     Value<int>? updatedAt,
     Value<bool>? isDeleted,
@@ -1921,6 +1964,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
       sourceType: sourceType ?? this.sourceType,
       sourceRef: sourceRef ?? this.sourceRef,
       lastReadAt: lastReadAt ?? this.lastReadAt,
+      sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -1962,6 +2006,9 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
     if (lastReadAt.present) {
       map['last_read_at'] = Variable<int>(lastReadAt.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -1993,6 +2040,7 @@ class NotesCompanion extends UpdateCompanion<NoteEntity> {
           ..write('sourceType: $sourceType, ')
           ..write('sourceRef: $sourceRef, ')
           ..write('lastReadAt: $lastReadAt, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
@@ -4077,6 +4125,7 @@ typedef $$NotesTableCreateCompanionBuilder =
       Value<String?> sourceType,
       Value<String?> sourceRef,
       Value<int?> lastReadAt,
+      Value<int> sortOrder,
       required int createdAt,
       required int updatedAt,
       Value<bool> isDeleted,
@@ -4095,6 +4144,7 @@ typedef $$NotesTableUpdateCompanionBuilder =
       Value<String?> sourceType,
       Value<String?> sourceRef,
       Value<int?> lastReadAt,
+      Value<int> sortOrder,
       Value<int> createdAt,
       Value<int> updatedAt,
       Value<bool> isDeleted,
@@ -4157,6 +4207,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<int> get lastReadAt => $composableBuilder(
     column: $table.lastReadAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4240,6 +4295,11 @@ class $$NotesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -4308,6 +4368,9 @@ class $$NotesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -4359,6 +4422,7 @@ class $$NotesTableTableManager
                 Value<String?> sourceType = const Value.absent(),
                 Value<String?> sourceRef = const Value.absent(),
                 Value<int?> lastReadAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -4375,6 +4439,7 @@ class $$NotesTableTableManager
                 sourceType: sourceType,
                 sourceRef: sourceRef,
                 lastReadAt: lastReadAt,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
@@ -4393,6 +4458,7 @@ class $$NotesTableTableManager
                 Value<String?> sourceType = const Value.absent(),
                 Value<String?> sourceRef = const Value.absent(),
                 Value<int?> lastReadAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
                 Value<bool> isDeleted = const Value.absent(),
@@ -4409,6 +4475,7 @@ class $$NotesTableTableManager
                 sourceType: sourceType,
                 sourceRef: sourceRef,
                 lastReadAt: lastReadAt,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,

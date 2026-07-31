@@ -39,6 +39,9 @@ class Notes extends Table {
   /// F1.19 续学用
   IntColumn get lastReadAt => integer().nullable()();
 
+  /// 同一书、章或节内的显示顺序。
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
   /// 创建时间（毫秒）
   IntColumn get createdAt => integer()();
 

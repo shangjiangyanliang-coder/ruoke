@@ -37,6 +37,9 @@ class Note {
   /// 续学时间戳
   final int? lastReadAt;
 
+  /// 同一书、章或节内的显示顺序
+  final int sortOrder;
+
   /// 创建时间（毫秒）
   final int createdAt;
 
@@ -60,6 +63,7 @@ class Note {
     required this.sourceType,
     required this.sourceRef,
     required this.lastReadAt,
+    this.sortOrder = 0,
     required this.createdAt,
     required this.updatedAt,
     required this.isDeleted,
@@ -68,26 +72,26 @@ class Note {
 
   /// 从 Drift 实体转领域模型。
   factory Note.fromEntity(NoteEntity e) => Note(
-        id: e.id,
-        subjectId: e.subjectId,
-        title: e.title,
-        contentJson: e.contentJson,
-        plainText: e.plainText,
-        isDraft: e.isDraft,
-        isAiHidden: e.isAiHidden,
-        sourceType: e.sourceType,
-        sourceRef: e.sourceRef,
-        lastReadAt: e.lastReadAt,
-        createdAt: e.createdAt,
-        updatedAt: e.updatedAt,
-        isDeleted: e.isDeleted,
-        deletedAt: e.deletedAt,
-      );
+    id: e.id,
+    subjectId: e.subjectId,
+    title: e.title,
+    contentJson: e.contentJson,
+    plainText: e.plainText,
+    isDraft: e.isDraft,
+    isAiHidden: e.isAiHidden,
+    sourceType: e.sourceType,
+    sourceRef: e.sourceRef,
+    lastReadAt: e.lastReadAt,
+    sortOrder: e.sortOrder,
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt,
+    isDeleted: e.isDeleted,
+    deletedAt: e.deletedAt,
+  );
 
   /// 列表显示用标题：空标题回退"无标题"。
-  String get displayTitle => (title == null || title!.trim().isEmpty)
-      ? '无标题'
-      : title!;
+  String get displayTitle =>
+      (title == null || title!.trim().isEmpty) ? '无标题' : title!;
 
   /// 列表摘要：首段纯文字前若干字。
   String get summary {
