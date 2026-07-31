@@ -11,7 +11,6 @@ import '../features/notes/view/note_editor_view.dart';
 import '../features/notes/view/library_browser_view.dart';
 import '../features/notes/view/note_search_view.dart';
 import '../features/notes/view/note_version_list_view.dart';
-import '../features/notes/view/subject_manage_view.dart';
 import '../features/notes/view/tag_management_view.dart';
 import '../features/notes/models/library_location.dart';
 import 'placeholder_page.dart';
@@ -120,20 +119,6 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: '/settings',
               builder: (context, state) => const SettingsView(),
-              routes: [
-                GoRoute(
-                  path: 'subjects',
-                  builder: (context, state) => const LibraryBrowserView(
-                    location: LibraryLocation.root(),
-                  ),
-                  routes: [
-                    GoRoute(
-                      path: 'legacy',
-                      builder: (context, state) => const SubjectManageView(),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ],
         ),

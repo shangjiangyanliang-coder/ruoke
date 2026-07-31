@@ -157,6 +157,7 @@ class _SubjectRepositoryFake implements SubjectRepository {
     required String name,
     required int level,
     String? parentId,
+    String? folderId,
     int sortOrder = 0,
   }) => throw UnimplementedError();
 

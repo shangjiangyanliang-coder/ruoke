@@ -179,6 +179,7 @@ Future<void> _showCreateDialog(
       );
     },
   );
+  await Future<void>.delayed(const Duration(milliseconds: 250));
   nameCtrl.dispose();
   // 刷新 B1 树（科目变更后树要重拉）
   if (result == true) {

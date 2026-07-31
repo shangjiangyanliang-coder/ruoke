@@ -26,6 +26,11 @@ class NoteListView extends ConsumerWidget {
         title: const Text('笔记'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.view_list_outlined),
+            tooltip: '逐级浏览',
+            onPressed: () => context.go('/notes'),
+          ),
+          IconButton(
             icon: const Icon(Icons.label_outline),
             tooltip: '标签搜索',
             onPressed: () => context.push('/notes/tags'),

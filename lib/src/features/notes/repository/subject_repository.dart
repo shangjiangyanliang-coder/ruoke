@@ -26,6 +26,7 @@ abstract class SubjectRepository {
     required String name,
     required int level,
     String? parentId,
+    String? folderId,
     int sortOrder = 0,
   });
 

@@ -91,6 +91,7 @@ class LocalSubjectRepository implements SubjectRepository {
     required String name,
     required int level,
     String? parentId,
+    String? folderId,
     int sortOrder = 0,
   }) => guard(
     () async {
@@ -100,6 +101,7 @@ class LocalSubjectRepository implements SubjectRepository {
         SubjectsCompanion(
           id: Value(id),
           parentId: Value(parentId),
+          folderId: Value(folderId),
           name: Value(name),
           level: Value(level),
           sortOrder: Value(sortOrder),

@@ -5,6 +5,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/note.dart';
+import '../models/library_navigation_state.dart';
+import 'library_navigation_view_model.dart';
 import 'note_editor_view_model.dart';
 import 'note_list_view_model.dart';
 import 'note_search_view_model.dart';
@@ -19,6 +21,11 @@ import 'tag_search_view_model.dart';
 final noteListVmProvider = AsyncNotifierProvider<NoteListVm, List<Note>>(
   NoteListVm.new,
 );
+
+final libraryNavigationVmProvider =
+    AsyncNotifierProvider<LibraryNavigationVm, LibraryNavigationState>(
+      LibraryNavigationVm.new,
+    );
 
 /// 笔记编辑器 ViewModel Provider（普通 AsyncNotifier，arg 经 init() 传入）。
 final noteEditorVmProvider =

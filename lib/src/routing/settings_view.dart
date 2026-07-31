@@ -2,7 +2,6 @@
 // 作用: "我的" tab 设置页。当前第3批含：学科管理入口、占位条目（复习设置/AI隐私/备份）。
 //       后续批逐次填充。点击条目跳对应子页。
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 /// "我的" tab 设置页。
 class SettingsView extends StatelessWidget {
@@ -14,14 +13,6 @@ class SettingsView extends StatelessWidget {
       appBar: AppBar(title: const Text('我的')),
       body: ListView(
         children: [
-          ListTile(
-            leading: const Icon(Icons.account_tree_outlined),
-            title: const Text('学科管理'),
-            subtitle: const Text('书-章-节 增删改'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/settings/subjects'),
-          ),
-          const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.timer_outlined),
             title: const Text('复习设置'),
