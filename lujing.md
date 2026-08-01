@@ -2067,5 +2067,178 @@ git commits：`9b00c60 feat: 笔记分级-书章节树+一键定级`（16 文件
 - 展开浏览必须以当前位置为递归根节点，进入文件夹后不能自动扩大到全库。
 - 位置合法性必须集中到 `LibrarySelectionRules`，并先用纯规则测试锁定边界。
 - 任何创建取消路径都不能调用仓储写方法；成功后必须统一失效相关 Provider。
-- 阶段5历史计划汇总只包含已经实施的批次；最新移动排序计划在代码完成前必须保持独立。
-- 移动排序后续实现必须按设计文档和 TDD 计划执行，不能把设计提交误写成已完成功能。
+- 阶段5历史计划汇总只包含已经实施的批次；最新移动排序计划已全部实施完毕，已合并到本汇总。
+- 移动排序已按设计文档和 TDD 计划全部实现，真机验证通过。
+
+---
+
+## 技术路径记录：2026-08-01 14:30
+
+### 1. 完成事项
+
+阶段5「目录项目移动与排序」全部 10 项任务实施完毕并真机验证通过。交付内容：文件夹、书、章、节、笔记五类项目统一三点菜单；五类项目同级拖拽排序；跨目录移动并可精确选择插入位置；新建项目稳定追加到同类型末尾；移动/排序后逐级与展开浏览即时刷新。
+
+### 2. 初始条件与输入
+
+- 前序成果：无限级文件夹、书-章-节固定层级、主页逐级/展开浏览、当前目录位置选择、v1→v3 数据迁移均已闭环；
+- 分支：`feature/notes-mvp`；
+- 输入文件：`jihua/ruoke-阶段5目录项目移动与排序实施计划-20260731-1049.md`（设计依据 + TDD 任务清单，完成后并入汇总并删除原文件）；
+- 前序基线提交：`b5b3ec1`；
+- 约束：未经确认不 push、不删除备份；每改文件先备份；真机测试由用户手动执行。
+
+### 3. 技术方案选择
+
+#### 可选方案
+
+- 方案 A：新增统一 position 关系表，集中管理所有层级的排序位置；
+- 方案 B：排序字段使用小数或大间隔数字，减少重排写操作；
+- 方案 C：继续使用各业务表现有 `sortOrder`，排序仅在「同一父级 + 同一类型」内有意义，保存时把整组重排为从 0 开始的连续整数。
+
+#### 最终选择
+
+方案 C。
+
+#### 选择原因
+
+- 与现有数据库结构完全兼容，只需 v4 迁移为 `note` 表补 `sort_order`，其余表已有 `sort_order`；
+- 不引入新表和双写逻辑，事务内重排成本低、正确性易验证；
+- 符合用户明确要求：分类展示固定（文件夹组在书组前，章/节组在笔记组前），`sortOrder` 只在同父级同类型内有效；
+- 小数排序方案虽减少写次数，但会带来精度漂移和排序键维护复杂度，收益不足以抵消风险。
+
+### 4. 详细实施路径
+
+#### 步骤 1：排序数据迁移（Task 1，提交 b7183cc）
+
+- **目的：** 为五类项目提供稳定、连续的初始顺序；
+- **操作：** 新增数据库 v4 迁移：`note` 表增加 `sort_order`；为已有文件夹、书、章、节、笔记按「同父级同类型」分组生成 `max(sortOrder)+1` 的连续序号；
+- **方法：** Drift `MigrationStrategy` + 迁移测试；
+- **输入：** `app_database.dart`、既有 v3 schema；
+- **输出：** v4 schema 与迁移测试；
+- **判断依据：** `app_database_migration_test.dart` 覆盖 v1→v2、v2→v3、v3→v4 数据保留。
+
+#### 步骤 2：文件夹与书排序移动（Task 2，提交 70f9077）
+
+- **目的：** 文件夹和书支持同级拖拽排序与跨文件夹移动；
+- **操作：** `FolderRepository`、`SubjectRepository` 增加排序和移动方法；文件夹可移到根目录或任意其他文件夹（排除自身及后代），书可移到根目录或任意文件夹；移动时完整保留后代；
+- **输出：** 排序/移动仓储接口 + 定向测试。
+
+#### 步骤 3：章节目排序移动（Task 3，提交 bbe17be）
+
+- **目的：** 章、节支持排序与跨父级移动；
+- **操作：** 章可移到任意书下，节可移到任意章下；保存时把来源与目标同级列表整体重排为连续整数；
+- **判断依据：** 定向测试覆盖开头、中间、末尾插入位置。
+
+#### 步骤 4：笔记排序移动与菜单重命名（Task 4，提交 65ed92f）
+
+- **目的：** 笔记支持排序、跨书/章/节移动、菜单重命名；
+- **操作：** `NoteRepository` 增加排序/移动/重命名；重命名只改标题不创建 `note_version`；
+- **输出：** 笔记排序移动接口与测试。
+
+#### 步骤 5：目录组织规则与调度接口（Task 5，提交 0173b8a）
+
+- **目的：** 统一校验层级约束、循环目标和事务原子性；
+- **操作：** 新增 `LibraryOrganizationController` 统一调度排序/移动；`LibrarySelectionRules` 集中校验目标合法性（文件夹→文件夹，书→文件夹/根，章→书，节→章，笔记→书/章/节），排除移动对象自身及后代；
+- **输出：** controller + 规则纯测试。
+
+#### 步骤 6：同级拖拽排序页（Task 6，提交 7d40a10）
+
+- **目的：** 提供可视化排序界面；
+- **操作：** 新增 `library_reorder_view.dart`，加载真实父级下的完整同类型列表，拖拽只改页面草稿，点击保存才写数据库；取消/返回不写数据。
+
+#### 步骤 7：目录树目标选择与移动页（Task 7，提交 e988bb8）
+
+- **目的：** 支持跨目录移动并精确选择插入位置；
+- **操作：** 新增可搜索、可展开的完整目录树目标选择页（`library_move_view.dart`、`library_move_target_tree.dart`），先选合法父级，再在目标同类型列表中拖拽确定精确位置；同名书章节用完整路径区分。
+
+#### 步骤 8：统一五类目录项目菜单（Task 8，提交 0dade88）
+
+- **目的：** 消除五类项目入口不一致；
+- **操作：** 新增 `library_item_action_menu.dart` 统一 PopupMenuButton：文件夹含「重命名/移动/调整顺序/安全解散」四项，书/章/节/笔记含「重命名/移动/调整顺序」三项；移除书旧移动按钮、章/节旧 `>` 图标；笔记新增三点菜单；
+- **输出：** `library_item_action_menu_test.dart`。
+
+#### 步骤 9：展开树统一菜单与稳定排序（Task 9，提交 0dade88）
+
+- **目的：** 展开浏览树与逐级浏览行为一致；
+- **操作：** `expandedLibraryProvider`/`ExpandedLibraryData` 公开；展开树节点挂载统一菜单；排序稳定为 `sortOrder → createdAt → id`；新增 `invalidateLibraryBrowserData(ref)` 统一失效全部位置实例，移动/排序后立即刷新。
+
+#### 步骤 10：构建验证与依赖清理（Task 10，提交 0dade88 及 9a5f5ab）
+
+- **目的：** 全量验证并清理；
+- **操作：** `pubspec.yaml` 增加 `sqlite3` dev 依赖（测试环境需要）；删除 `subject_path.dart` 未使用导入；全项目 `dart format`；修复两处测试失败（见问题节）；
+- **判断依据：** 全量测试、analyze、APK 构建均通过。
+
+### 5. 核心技术细节
+
+- 排序键规则：`sortOrder` 仅在「同一父级 + 同一类型」内有意义；分类展示顺序固定为 文件夹→书→章→节→笔记；
+- 保存算法：移动/排序保存时，把来源与目标同级列表统一重排为从 0 开始的连续整数，避免空洞；
+- 移动约束：文件夹→根或任意文件夹（排除自身与后代）；书→根或任意文件夹；章→任意书；节→任意章；笔记→任意书/章/节；
+- 事务原子性：`LibraryOrganizationController` 在 Drift 事务内完成校验与写入，任一失败整体回滚；
+- Provider 失效策略：成功写入后必须失效逐级浏览、展开树、来源目录、目标目录和位置选择相关 Provider，禁止依赖重启应用刷新；
+- 历史版本隔离：笔记菜单重命名仅更新标题，不生成 `note_version`；编辑器正常保存仍沿用完整历史版本机制；
+- 测试修复要点：对话框关闭动画期间不能立即释放 `TextEditingController`（需 `addPostFrameCallback` 延迟释放）；页面转场期间刷新 Focus 依赖的 Provider 会触发 build scope 错误（`_refreshLibraryRoots` 需 `addPostFrameCallback` 延迟执行）。
+
+### 6. 文件与资源变更
+
+| 文件或资源 | 操作 | 具体内容 | 作用 |
+|---|---|---|---|
+| `lib/data/database/app_database.dart` | 修改 | v4 迁移与 note.sort_order | 排序数据底座 |
+| `lib/.../library_organization_controller.dart` | 新增 | 排序/移动统一调度 | 事务与规则入口 |
+| `lib/.../library_selection_rules.dart` | 修改 | 目标合法性校验 | 层级与循环约束 |
+| `lib/.../library_reorder_view.dart` | 新增 | 同级拖拽排序页 | 可视化排序 |
+| `lib/.../library_move_view.dart`、`library_move_target_tree.dart` | 新增 | 目标选择与移动页 | 跨目录移动 |
+| `lib/.../library_item_action_menu.dart` | 新增 | 五类统一三点菜单 | 统一操作入口 |
+| `lib/.../library_expanded_tree.dart` | 修改 | 展开树挂载菜单、稳定排序 | 展开浏览一致性 |
+| `lib/.../library_browser_view.dart` | 修改 | 接入统一菜单、移除旧入口 | 逐级浏览一致性 |
+| `lib/.../library_browser_view_model.dart` | 修改 | 统一失效全部位置实例 | 移动/排序即时刷新 |
+| `pubspec.yaml` | 修改 | 增加 sqlite3 dev 依赖 | 测试环境可用 |
+| `test/features/notes/` 相关测试 | 新增/修改 | 迁移、规则、排序、移动、菜单、展开树测试 | 回归保护 |
+| `jihua/ruoke-阶段5目录项目移动与排序实施计划-20260731-1049.md` | 删除 | 内容并入汇总 | 只保留一份计划文档 |
+| `jihua/ruoke-阶段5已实施计划汇总-20260731.md` | 修改 | 追加移动排序计划全文 | 统一归档 |
+
+### 7. 问题、尝试与解决过程
+
+#### 问题 1：对话框关闭动画期间 TextField 访问已释放控制器
+
+- **表现：** `library_browser_view_test` 中重命名后偶发 `TextField` 使用已释放 controller；
+- **原因判断：** 对话框 `Navigator.pop` 后关闭动画仍在运行，立即 `dispose()` 导致 TextField 访问已释放对象；
+- **最终处理：** `_showRenameDialog` 中改为 `WidgetsBinding.instance.addPostFrameCallback` 延迟释放；
+- **处理结果：** 重命名测试稳定通过。
+
+#### 问题 2：页面转场期间刷新展开树导致 build scope 错误
+
+- **表现：** 移动/排序成功刷新时出现 Focus 节点在错误 build scope 中重建；
+- **原因判断：** `_refreshLibraryRoots` 在转场未结束时同步刷新展开树 Provider；
+- **最终处理：** 改为 `addPostFrameCallback` 延迟执行 `refreshLibraryExpandedTree(ref)`；
+- **处理结果：** 展开模式移动/排序测试稳定通过。
+
+#### 问题 3：Flutter 锁文件卡住命令
+
+- **表现：** `C:\flutter\flutter\bin\cache\lockfile` 与 `flutter.bat.lock` 为 0 字节残留锁，`flutter` 命令卡住；
+- **最终处理：** 删除残留锁文件后恢复；沙箱内改用 `dart.exe + flutter_tools.snapshot` 直接调用 Flutter 工具；
+- **处理结果：** test/build/analyze 均可正常执行。
+
+#### 问题 4：PowerShell 正则替换损坏 Dart 文件
+
+- **表现：** 用 PowerShell 正则给 `if` 补花括号时破坏了 `library_creation_scope.dart` / `library_selection_rules.dart`，出现大量 undefined class 错误；
+- **最终处理：** 从备份恢复文件，改用 Node.js 精确字符串替换；
+- **处理结果：** 花括号 lint 修复（提交 9a5f5ab），analyze 全绿。
+
+### 8. 验证方法与结果
+
+- 定向测试：`library_item_action_menu_test.dart`、`library_browser_view_test.dart`、`library_move_view_test.dart`、`library_move_target_tree_test.dart` 等全部通过；
+- 全量测试：`flutter test` 251 项全部通过；
+- 静态分析：`dart analyze lib test` 输出 `No issues found!`；
+- APK 构建：`flutter build apk --debug` 成功，产物 `build\app\outputs\flutter-apk\app-debug.apk`；
+- 真机验证：用户手动安装到 PJF110，25 项真机测试全部通过（五类菜单、展开树菜单、同级排序、跨目录移动、精确位置、安全解散、新建默认排序、重命名）；
+- 文档整理：`git diff --check` 通过；已确认 jihua 中阶段5文件只剩一份汇总。
+
+### 9. 可复现要点
+
+- 排序/移动必须走 `LibraryOrganizationController`，不允许 UI 直连 DAO；
+- 移动保存时把来源与目标列表整体重排为从 0 开始的连续整数；
+- 成功后必须调用 `invalidateLibraryBrowserData(ref)` 等统一失效逻辑，不能依赖重启；
+- 目录树搜索必须保留祖先路径，同名项目用完整路径区分；
+- 笔记重命名不得创建历史版本；
+- 修改 Dart 文件的花括号等小格式问题用精确字符串替换（Node.js/Python），避免 PowerShell 正则误伤；
+- Flutter 命令卡住时先检查 `C:\flutter\flutter\bin\cache\lockfile` 与 `flutter.bat.lock` 残留锁；
+- 计划文件已并入 `ruoke-阶段5已实施计划汇总-20260731.md`，原独立计划文件已删除，不再单独维护。
