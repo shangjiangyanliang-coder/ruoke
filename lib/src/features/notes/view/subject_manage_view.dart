@@ -63,8 +63,10 @@ class _SubjectRow extends ConsumerWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(subject.levelLabel,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            subject.levelLabel,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           IconButton(
             icon: const Icon(Icons.edit, size: 18),
             tooltip: '改名',
@@ -82,8 +84,7 @@ class _SubjectRow extends ConsumerWidget {
 }
 
 /// 新建科目弹窗：名字 + level + 父节点。
-Future<void> _showCreateDialog(
-    BuildContext context, WidgetRef ref) async {
+Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
   final nameCtrl = TextEditingController();
   int level = 0;
   String? parentId;
@@ -110,7 +111,9 @@ Future<void> _showCreateDialog(
                   TextField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(
-                        labelText: '名称', hintText: '输入书/章/节名称'),
+                      labelText: '名称',
+                      hintText: '输入书/章/节名称',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   // Level 选择
@@ -138,11 +141,15 @@ Future<void> _showCreateDialog(
                       decoration: const InputDecoration(labelText: '父节点（可选）'),
                       items: [
                         const DropdownMenuItem<String?>(
-                            value: null, child: Text('无(顶级)')),
-                        ...parentOptions.map((s) => DropdownMenuItem<String?>(
-                              value: s.id,
-                              child: Text('${s.levelLabel}: ${s.name}'),
-                            )),
+                          value: null,
+                          child: Text('无(顶级)'),
+                        ),
+                        ...parentOptions.map(
+                          (s) => DropdownMenuItem<String?>(
+                            value: s.id,
+                            child: Text('${s.levelLabel}: ${s.name}'),
+                          ),
+                        ),
                       ],
                       onChanged: (v) => setSt(() => parentId = v),
                     ),
@@ -152,13 +159,16 @@ Future<void> _showCreateDialog(
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('取消')),
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
               FilledButton(
                 onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
                   try {
-                    await ref.read(subjectManageVmProvider.notifier).create(
+                    await ref
+                        .read(subjectManageVmProvider.notifier)
+                        .create(
                           name: nameCtrl.text.trim(),
                           level: level,
                           parentId: level > 0 ? parentId : null,
@@ -166,8 +176,9 @@ Future<void> _showCreateDialog(
                     if (ctx.mounted) Navigator.pop(ctx, true);
                   } catch (e) {
                     if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('新建失败：$e')));
+                      ScaffoldMessenger.of(
+                        ctx,
+                      ).showSnackBar(SnackBar(content: Text('新建失败：$e')));
                     }
                   }
                 },
@@ -189,7 +200,10 @@ Future<void> _showCreateDialog(
 
 /// 改名弹窗。
 Future<void> _showRenameDialog(
-    BuildContext context, WidgetRef ref, Subject subject) async {
+  BuildContext context,
+  WidgetRef ref,
+  Subject subject,
+) async {
   final nameCtrl = TextEditingController(text: subject.name);
   await showDialog<bool>(
     context: context,
@@ -201,8 +215,9 @@ Future<void> _showRenameDialog(
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
         FilledButton(
           onPressed: () async {
             if (nameCtrl.text.trim().isEmpty) return;
@@ -210,7 +225,8 @@ Future<void> _showRenameDialog(
             //   当前 Repository/Dao 无 rename 方法，留 V2 补（同 F1.1.12）。先提示不可用。
             if (ctx.mounted) {
               ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('改名功能待 V2 补充（当前走新建+删旧）')));
+                const SnackBar(content: Text('改名功能待 V2 补充（当前走新建+删旧）')),
+              );
               Navigator.pop(ctx, false);
             }
           },
@@ -224,19 +240,24 @@ Future<void> _showRenameDialog(
 
 /// 删除确认。
 Future<void> _confirmDelete(
-    BuildContext context, WidgetRef ref, Subject subject) async {
+  BuildContext context,
+  WidgetRef ref,
+  Subject subject,
+) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('删除科目？'),
-      content:
-          const Text('删除后科目及其下笔记仍保留在库（软删），\n可在回收站恢复。'),
+      content: const Text('删除后科目及其下笔记仍保留在库（软删），\n可在回收站恢复。'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
         TextButton(
-            onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('删除'),
+        ),
       ],
     ),
   );

@@ -13,7 +13,9 @@ import '../view_model/view_model_providers.dart';
 
 /// 弹出定级窗，返回选中的 subjectId（取消/空树返回 null）。
 Future<String?> showSubjectPickerDialog(
-    BuildContext context, WidgetRef ref) async {
+  BuildContext context,
+  WidgetRef ref,
+) async {
   final state = ref.read(subjectTreeVmProvider).value;
   if (state == null || state.books.isEmpty) {
     // 无科目：提示无法定级，但仍允许以"未分类"建（返回 defaultSubjectId）
@@ -23,8 +25,14 @@ Future<String?> showSubjectPickerDialog(
         title: const Text('新建笔记'),
         content: const Text('还没有科目树。\n是否作为"未分类"笔记新建？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('未分类新建')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('未分类新建'),
+          ),
         ],
       ),
     );
@@ -64,30 +72,36 @@ Future<String?> showSubjectPickerDialog(
                   final isSel = opt.subject.id == selected;
                   return ListTile(
                     dense: true,
-                    contentPadding:
-                        EdgeInsets.only(left: 8.0 + opt.depth * 16),
+                    contentPadding: EdgeInsets.only(left: 8.0 + opt.depth * 16),
                     leading: Icon(
                       const {
-                        0: Icons.menu_book,
-                        1: Icons.bookmark,
-                        2: Icons.article
-                      }[opt.subject.level] ??
+                            0: Icons.menu_book,
+                            1: Icons.bookmark,
+                            2: Icons.article,
+                          }[opt.subject.level] ??
                           Icons.circle,
                       size: 18,
                     ),
                     title: Text(opt.subject.name),
                     trailing: isSel
-                        ? Icon(Icons.check,
-                            color: Theme.of(ctx).colorScheme.primary)
-                        : Text(opt.subject.levelLabel,
-                            style: Theme.of(ctx).textTheme.bodySmall),
+                        ? Icon(
+                            Icons.check,
+                            color: Theme.of(ctx).colorScheme.primary,
+                          )
+                        : Text(
+                            opt.subject.levelLabel,
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
                     onTap: () => setSt(() => selected = opt.subject.id),
                   );
                 },
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('取消')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('取消'),
+              ),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, selected),
                 child: const Text('新建'),

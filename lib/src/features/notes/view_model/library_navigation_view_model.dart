@@ -69,8 +69,6 @@ class LibraryNavigationVm extends AsyncNotifier<LibraryNavigationState> {
   void completeSelection() {
     final current = state.value;
     if (current == null) return;
-    state = AsyncData(
-      LibraryNavigationState(browseMode: current.browseMode),
-    );
+    state = AsyncData(LibraryNavigationState(browseMode: current.browseMode));
   }
 }

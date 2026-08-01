@@ -32,7 +32,10 @@ void main() {
   test('内容和笔记位置只接受对应的合法层级', () {
     final rules = LibrarySelectionRules(
       folders: [_folder('folder')],
-      subjects: [_subject('book', 0, folderId: 'folder'), _subject('chapter', 1, parentId: 'book')],
+      subjects: [
+        _subject('book', 0, folderId: 'folder'),
+        _subject('chapter', 1, parentId: 'book'),
+      ],
     );
     final content = LibrarySelectionSession(
       kind: LibrarySelectionKind.contentLocation,
@@ -49,17 +52,58 @@ void main() {
       previousBrowseMode: LibraryBrowseMode.drillDown,
     );
 
-    expect(rules.canSelectCurrent(session: content, location: const LibraryLocation.subject('book')), isTrue);
-    expect(rules.canSelectCurrent(session: content, location: const LibraryLocation.subject('chapter')), isFalse);
-    expect(rules.canSelectCurrent(session: note, location: const LibraryLocation.folder('folder')), isFalse);
-    expect(rules.canSelectCurrent(session: note, location: const LibraryLocation.subject('chapter')), isTrue);
+    expect(
+      rules.canSelectCurrent(
+        session: content,
+        location: const LibraryLocation.subject('book'),
+      ),
+      isTrue,
+    );
+    expect(
+      rules.canSelectCurrent(
+        session: content,
+        location: const LibraryLocation.subject('chapter'),
+      ),
+      isFalse,
+    );
+    expect(
+      rules.canSelectCurrent(
+        session: note,
+        location: const LibraryLocation.folder('folder'),
+      ),
+      isFalse,
+    );
+    expect(
+      rules.canSelectCurrent(
+        session: note,
+        location: const LibraryLocation.subject('chapter'),
+      ),
+      isTrue,
+    );
   });
 }
 
 SubjectFolder _folder(String id, [String? parentId]) => SubjectFolder(
-  id: id, parentId: parentId, name: id, sortOrder: 0, createdAt: 0, updatedAt: 0, isDeleted: false, deletedAt: null,
+  id: id,
+  parentId: parentId,
+  name: id,
+  sortOrder: 0,
+  createdAt: 0,
+  updatedAt: 0,
+  isDeleted: false,
+  deletedAt: null,
 );
 
-Subject _subject(String id, int level, {String? parentId, String? folderId}) => Subject(
-  id: id, parentId: parentId, name: id, level: level, folderId: folderId, sortOrder: 0, createdAt: 0, updatedAt: 0, isDeleted: false, deletedAt: null,
-);
+Subject _subject(String id, int level, {String? parentId, String? folderId}) =>
+    Subject(
+      id: id,
+      parentId: parentId,
+      name: id,
+      level: level,
+      folderId: folderId,
+      sortOrder: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      isDeleted: false,
+      deletedAt: null,
+    );

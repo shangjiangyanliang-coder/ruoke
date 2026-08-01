@@ -10,16 +10,18 @@ import '../utils/library_selection_rules.dart';
 
 final librarySelectionRulesProvider =
     FutureProvider.autoDispose<LibrarySelectionRules>((ref) async {
-  final foldersResult = await ref.read(folderRepositoryProvider).listAll();
-  final subjectsResult = await ref.read(subjectRepositoryProvider).listAll();
+      final foldersResult = await ref.read(folderRepositoryProvider).listAll();
+      final subjectsResult = await ref
+          .read(subjectRepositoryProvider)
+          .listAll();
 
-  List<T> value<T>(Result<List<T>> result) {
-    if (result case Success<List<T>>(:final value)) return value;
-    throw (result as Failure<List<T>>).exception;
-  }
+      List<T> value<T>(Result<List<T>> result) {
+        if (result case Success<List<T>>(:final value)) return value;
+        throw (result as Failure<List<T>>).exception;
+      }
 
-  return LibrarySelectionRules(
-    folders: value<SubjectFolder>(foldersResult),
-    subjects: value<Subject>(subjectsResult),
-  );
-});
+      return LibrarySelectionRules(
+        folders: value<SubjectFolder>(foldersResult),
+        subjects: value<Subject>(subjectsResult),
+      );
+    });

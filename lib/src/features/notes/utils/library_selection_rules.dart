@@ -13,10 +13,9 @@ class LibrarySelectionRules {
   factory LibrarySelectionRules({
     required List<SubjectFolder> folders,
     required List<Subject> subjects,
-  }) => LibrarySelectionRules._(
-    folders,
-    {for (final subject in subjects) subject.id: subject},
-  );
+  }) => LibrarySelectionRules._(folders, {
+    for (final subject in subjects) subject.id: subject,
+  });
 
   LibrarySelectionRules._(this._folders, this._subjectsById);
 
@@ -26,9 +25,15 @@ class LibrarySelectionRules {
   }) {
     return switch (origin) {
       LibraryRootLocation() => true,
-      LibraryFolderLocation(:final folderId) => _isInFolderScope(folderId, candidate),
+      LibraryFolderLocation(:final folderId) => _isInFolderScope(
+        folderId,
+        candidate,
+      ),
       LibraryUngroupedBooksLocation() => _isUngroupedScope(candidate),
-      LibrarySubjectLocation(:final subjectId) => _isInSubjectScope(subjectId, candidate),
+      LibrarySubjectLocation(:final subjectId) => _isInSubjectScope(
+        subjectId,
+        candidate,
+      ),
     };
   }
 
@@ -41,7 +46,8 @@ class LibrarySelectionRules {
     required LibrarySelectionSession session,
     required LibraryLocation location,
   }) {
-    if (!isWithinScope(origin: session.origin, candidate: location)) return false;
+    if (!isWithinScope(origin: session.origin, candidate: location))
+      return false;
     if (session.kind == LibrarySelectionKind.noteLocation) {
       final subject = _subjectAt(location);
       return subject != null && subject.level >= 0 && subject.level <= 2;
@@ -73,19 +79,25 @@ class LibrarySelectionRules {
 
   bool _isUngroupedScope(LibraryLocation candidate) => switch (candidate) {
     LibraryUngroupedBooksLocation() => true,
-    LibrarySubjectLocation(:final subjectId) => _bookFor(subjectId)?.folderId == null,
+    LibrarySubjectLocation(:final subjectId) =>
+      _bookFor(subjectId)?.folderId == null,
     _ => false,
   };
 
-  bool _isInSubjectScope(String originId, LibraryLocation candidate) => switch (candidate) {
-    LibrarySubjectLocation(:final subjectId) => _subjectDescendants(originId).contains(subjectId),
-    _ => false,
-  };
+  bool _isInSubjectScope(String originId, LibraryLocation candidate) =>
+      switch (candidate) {
+        LibrarySubjectLocation(:final subjectId) => _subjectDescendants(
+          originId,
+        ).contains(subjectId),
+        _ => false,
+      };
 
   Subject? _bookFor(String subjectId) {
     var current = _subjectsById[subjectId];
     while (current != null && current.level != 0) {
-      current = current.parentId == null ? null : _subjectsById[current.parentId!];
+      current = current.parentId == null
+          ? null
+          : _subjectsById[current.parentId!];
     }
     return current;
   }
@@ -93,7 +105,8 @@ class LibrarySelectionRules {
   Set<String> _folderDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final folder in _folders) {
-      if (folder.parentId != null) (children[folder.parentId!] ??= []).add(folder.id);
+      if (folder.parentId != null)
+        (children[folder.parentId!] ??= []).add(folder.id);
     }
     final result = <String>{};
     final pending = <String>[rootId];
@@ -107,7 +120,8 @@ class LibrarySelectionRules {
   Set<String> _subjectDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final subject in _subjectsById.values) {
-      if (subject.parentId != null) (children[subject.parentId!] ??= []).add(subject.id);
+      if (subject.parentId != null)
+        (children[subject.parentId!] ??= []).add(subject.id);
     }
     final result = <String>{};
     final pending = <String>[rootId];

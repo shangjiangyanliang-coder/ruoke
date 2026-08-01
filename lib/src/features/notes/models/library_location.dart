@@ -7,8 +7,10 @@ sealed class LibraryLocation {
 
   const factory LibraryLocation.root() = LibraryRootLocation;
   const factory LibraryLocation.folder(String folderId) = LibraryFolderLocation;
-  const factory LibraryLocation.ungroupedBooks() = LibraryUngroupedBooksLocation;
-  const factory LibraryLocation.subject(String subjectId) = LibrarySubjectLocation;
+  const factory LibraryLocation.ungroupedBooks() =
+      LibraryUngroupedBooksLocation;
+  const factory LibraryLocation.subject(String subjectId) =
+      LibrarySubjectLocation;
 }
 
 /// 文件夹系统根目录。

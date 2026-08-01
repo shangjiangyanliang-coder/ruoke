@@ -52,19 +52,18 @@ class Subject {
 
   /// 从 Drift 实体转领域模型。
   factory Subject.fromEntity(SubjectEntity e) => Subject(
-        id: e.id,
-        parentId: e.parentId,
-        name: e.name,
-        level: e.level,
-        folderId: e.folderId,
-        sortOrder: e.sortOrder,
-        createdAt: e.createdAt,
-        updatedAt: e.updatedAt,
-        isDeleted: e.isDeleted,
-        deletedAt: e.deletedAt,
-      );
+    id: e.id,
+    parentId: e.parentId,
+    name: e.name,
+    level: e.level,
+    folderId: e.folderId,
+    sortOrder: e.sortOrder,
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt,
+    isDeleted: e.isDeleted,
+    deletedAt: e.deletedAt,
+  );
 
   /// 层级中文标签（UI 面包屑/弹窗用）。
-  String get levelLabel =>
-      const {0: '书', 1: '章', 2: '节'}[level] ?? '科目';
+  String get levelLabel => const {0: '书', 1: '章', 2: '节'}[level] ?? '科目';
 }

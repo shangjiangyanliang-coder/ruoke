@@ -302,14 +302,16 @@ void main() {
   test('指定文件夹范围递归包含其内书及其书章节的笔记', () async {
     await _insertSubjectTree(db);
     await _insertScopeNotes(db);
-    await db.into(db.subjectFolders).insert(
-      const SubjectFoldersCompanion(
-        id: Value('folder-a'),
-        name: Value('资料'),
-        createdAt: Value(1),
-        updatedAt: Value(1),
-      ),
-    );
+    await db
+        .into(db.subjectFolders)
+        .insert(
+          const SubjectFoldersCompanion(
+            id: Value('folder-a'),
+            name: Value('资料'),
+            createdAt: Value(1),
+            updatedAt: Value(1),
+          ),
+        );
     await db.subjectDao.updateFolder('book-a', 'folder-a', 2);
 
     final notes = _successValue(

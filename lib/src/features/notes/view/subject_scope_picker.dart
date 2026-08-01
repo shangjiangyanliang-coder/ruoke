@@ -473,12 +473,14 @@ class _FolderScopePickerDialogState
               return const Center(child: Text('读取文件夹失败'));
             }
             final folders = result.value;
-            final names = {for (final folder in folders) folder.id: folder.name};
+            final names = {
+              for (final folder in folders) folder.id: folder.name,
+            };
             final visible = keyword.isEmpty
                 ? folders.where((folder) => folder.parentId == null).toList()
                 : folders
-                    .where((folder) => folder.name.contains(keyword))
-                    .toList();
+                      .where((folder) => folder.name.contains(keyword))
+                      .toList();
             return Column(
               children: [
                 TextField(

@@ -16,10 +16,12 @@ class _LibraryContentCreateDialog extends StatefulWidget {
   const _LibraryContentCreateDialog();
 
   @override
-  State<_LibraryContentCreateDialog> createState() => _LibraryContentCreateDialogState();
+  State<_LibraryContentCreateDialog> createState() =>
+      _LibraryContentCreateDialogState();
 }
 
-class _LibraryContentCreateDialogState extends State<_LibraryContentCreateDialog> {
+class _LibraryContentCreateDialogState
+    extends State<_LibraryContentCreateDialog> {
   final _controller = TextEditingController();
   LibraryContentKind _kind = LibraryContentKind.folder;
 
@@ -38,17 +40,25 @@ class _LibraryContentCreateDialogState extends State<_LibraryContentCreateDialog
         DropdownButtonFormField<LibraryContentKind>(
           initialValue: _kind,
           decoration: const InputDecoration(labelText: '创建类型'),
-          items: LibraryContentKind.values.map((kind) => DropdownMenuItem(
-            value: kind,
-            child: Text(_label(kind)),
-          )).toList(),
+          items: LibraryContentKind.values
+              .map(
+                (kind) =>
+                    DropdownMenuItem(value: kind, child: Text(_label(kind))),
+              )
+              .toList(),
           onChanged: (kind) => setState(() => _kind = kind!),
         ),
-        TextField(controller: _controller, decoration: const InputDecoration(labelText: '名称')),
+        TextField(
+          controller: _controller,
+          decoration: const InputDecoration(labelText: '名称'),
+        ),
       ],
     ),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
       FilledButton(
         onPressed: () {
           final name = _controller.text.trim();

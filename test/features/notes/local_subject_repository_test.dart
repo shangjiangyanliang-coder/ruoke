@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ruoke/src/data/database/app_database.dart';
 import 'package:ruoke/src/data/errors/app_exception.dart';
 import 'package:ruoke/src/data/errors/result.dart';
-import 'package:ruoke/src/features/notes/models/subject_path.dart';
 import 'package:ruoke/src/features/notes/repository/local_subject_repository.dart';
 
 void main() {

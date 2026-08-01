@@ -223,7 +223,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(tags.listCallCount, 2);
   });
-
 }
 
 Future<void> _pumpEditor(

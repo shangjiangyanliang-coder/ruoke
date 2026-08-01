@@ -30,34 +30,117 @@ class SubjectSeed {
     int order = 0;
 
     // 物理（书 level0）
-    final physicsId = await _insert(name: '物理', level: 0, sortOrder: order++, now: now);
+    final physicsId = await _insert(
+      name: '物理',
+      level: 0,
+      sortOrder: order++,
+      now: now,
+    );
 
     // 第1章 运动学（level1）
     final ch1Id = await _insert(
-        name: '第1章 运动学', level: 1, parentId: physicsId, sortOrder: order++, now: now);
-    await _insert(name: '匀速直线运动', level: 2, parentId: ch1Id, sortOrder: 0, now: now);
-    await _insert(name: '自由落体', level: 2, parentId: ch1Id, sortOrder: 1, now: now);
+      name: '第1章 运动学',
+      level: 1,
+      parentId: physicsId,
+      sortOrder: order++,
+      now: now,
+    );
+    await _insert(
+      name: '匀速直线运动',
+      level: 2,
+      parentId: ch1Id,
+      sortOrder: 0,
+      now: now,
+    );
+    await _insert(
+      name: '自由落体',
+      level: 2,
+      parentId: ch1Id,
+      sortOrder: 1,
+      now: now,
+    );
 
     // 第2章 力学（level1）
     final ch2Id = await _insert(
-        name: '第2章 力学', level: 1, parentId: physicsId, sortOrder: order++, now: now);
-    await _insert(name: '牛顿第一定律', level: 2, parentId: ch2Id, sortOrder: 0, now: now);
-    await _insert(name: '牛顿第二定律', level: 2, parentId: ch2Id, sortOrder: 1, now: now);
-    await _insert(name: '牛顿第三定律', level: 2, parentId: ch2Id, sortOrder: 2, now: now);
+      name: '第2章 力学',
+      level: 1,
+      parentId: physicsId,
+      sortOrder: order++,
+      now: now,
+    );
+    await _insert(
+      name: '牛顿第一定律',
+      level: 2,
+      parentId: ch2Id,
+      sortOrder: 0,
+      now: now,
+    );
+    await _insert(
+      name: '牛顿第二定律',
+      level: 2,
+      parentId: ch2Id,
+      sortOrder: 1,
+      now: now,
+    );
+    await _insert(
+      name: '牛顿第三定律',
+      level: 2,
+      parentId: ch2Id,
+      sortOrder: 2,
+      now: now,
+    );
 
     // 第3章 牛顿定律（level1，先建空章 demo 折叠态）
     await _insert(
-        name: '第3章 牛顿定律', level: 1, parentId: physicsId, sortOrder: order++, now: now);
+      name: '第3章 牛顿定律',
+      level: 1,
+      parentId: physicsId,
+      sortOrder: order++,
+      now: now,
+    );
 
     // 英语（书 level0）
-    final englishId = await _insert(name: '英语', level: 0, sortOrder: order++, now: now);
+    final englishId = await _insert(
+      name: '英语',
+      level: 0,
+      sortOrder: order++,
+      now: now,
+    );
     final ech1Id = await _insert(
-        name: '第1章 词汇', level: 1, parentId: englishId, sortOrder: 0, now: now);
-    await _insert(name: '高频词', level: 2, parentId: ech1Id, sortOrder: 0, now: now);
+      name: '第1章 词汇',
+      level: 1,
+      parentId: englishId,
+      sortOrder: 0,
+      now: now,
+    );
+    await _insert(
+      name: '高频词',
+      level: 2,
+      parentId: ech1Id,
+      sortOrder: 0,
+      now: now,
+    );
     final ech2Id = await _insert(
-        name: '第2章 语法', level: 1, parentId: englishId, sortOrder: 1, now: now);
-    await _insert(name: '时态', level: 2, parentId: ech2Id, sortOrder: 0, now: now);
-    await _insert(name: '从句', level: 2, parentId: ech2Id, sortOrder: 1, now: now);
+      name: '第2章 语法',
+      level: 1,
+      parentId: englishId,
+      sortOrder: 1,
+      now: now,
+    );
+    await _insert(
+      name: '时态',
+      level: 2,
+      parentId: ech2Id,
+      sortOrder: 0,
+      now: now,
+    );
+    await _insert(
+      name: '从句',
+      level: 2,
+      parentId: ech2Id,
+      sortOrder: 1,
+      now: now,
+    );
   }
 
   /// 插一条节点，返回新 id（子节点用它当 parentId）。

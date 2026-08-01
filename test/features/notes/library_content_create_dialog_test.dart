@@ -10,7 +10,8 @@ void main() {
       MaterialApp(
         home: Builder(
           builder: (context) => FilledButton(
-            onPressed: () async => draft = await showLibraryContentCreateDialog(context),
+            onPressed: () async =>
+                draft = await showLibraryContentCreateDialog(context),
             child: const Text('打开'),
           ),
         ),

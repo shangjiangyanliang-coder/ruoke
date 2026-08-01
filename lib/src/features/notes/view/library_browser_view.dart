@@ -1,4 +1,4 @@
-// 文件: lib/src/features/notes/view/library_browser_view.dart
+﻿// 文件: lib/src/features/notes/view/library_browser_view.dart
 // 作用: 文件夹、书、章、节的逐级笔记浏览页面。
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +8,8 @@ import '../../../data/errors/result.dart';
 import '../../../data/errors/app_exception.dart';
 import '../models/library_location.dart';
 import '../models/library_navigation_state.dart';
+import '../models/library_organization.dart';
 import '../models/subject.dart';
-import '../models/subject_folder.dart';
 import '../providers.dart';
 import '../utils/library_creation_scope.dart';
 import '../utils/library_selection_rules.dart';
@@ -18,10 +18,22 @@ import '../view_model/library_selection_rules_provider.dart';
 import '../view_model/view_model_providers.dart';
 import 'library_content_create_dialog.dart';
 import 'library_expanded_tree.dart';
+import 'library_item_action_menu.dart';
+import 'library_move_view.dart';
+import 'library_reorder_view.dart';
 
 class LibraryBrowserView extends ConsumerStatefulWidget {
   final LibraryLocation location;
-  const LibraryBrowserView({super.key, required this.location});
+  final Future<bool?> Function(BuildContext, LibraryMoveRequest)? moveLauncher;
+  final Future<bool?> Function(BuildContext, LibraryReorderRequest)?
+  reorderLauncher;
+
+  const LibraryBrowserView({
+    super.key,
+    required this.location,
+    this.moveLauncher,
+    this.reorderLauncher,
+  });
 
   @override
   ConsumerState<LibraryBrowserView> createState() => _LibraryBrowserViewState();
@@ -107,7 +119,18 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
                 ],
         ),
         body: browseMode == LibraryBrowseMode.expanded
-            ? LibraryExpandedTree(location: location)
+            ? LibraryExpandedTree(
+                location: location,
+                onAction: (kind, itemId, itemName, parentId, action) =>
+                    _handleItemAction(
+                      context,
+                      kind: kind,
+                      itemId: itemId,
+                      itemName: itemName,
+                      parentId: parentId,
+                      action: action,
+                    ),
+              )
             : data.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => Center(child: Text('加载失败：$error')),
@@ -172,27 +195,19 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
                           leading: const Icon(Icons.folder_outlined),
                           title: Text(folder.name),
                           trailing: selection == null
-                              ? PopupMenuButton<_FolderAction>(
-                                  onSelected: (action) => _handleFolderAction(
-                                    context,
-                                    ref,
-                                    folder,
-                                    action,
+                              ? LibraryItemActionMenu(
+                                  key: ValueKey(
+                                    'library-item-menu-folder-${folder.id}',
                                   ),
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: _FolderAction.rename,
-                                      child: Text('重命名'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _FolderAction.move,
-                                      child: Text('移动'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _FolderAction.dissolve,
-                                      child: Text('安全解散'),
-                                    ),
-                                  ],
+                                  kind: LibraryItemKind.folder,
+                                  onSelected: (action) => _handleItemAction(
+                                    context,
+                                    kind: LibraryItemKind.folder,
+                                    itemId: folder.id,
+                                    itemName: folder.name,
+                                    parentId: folder.parentId,
+                                    action: action,
+                                  ),
                                 )
                               : const Icon(Icons.chevron_right),
                           onTap:
@@ -214,13 +229,19 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
                           leading: const Icon(Icons.menu_book_outlined),
                           title: Text(book.name),
                           trailing: selection == null
-                              ? IconButton(
-                                  tooltip: '移动书',
-                                  icon: const Icon(
-                                    Icons.drive_file_move_outlined,
+                              ? LibraryItemActionMenu(
+                                  key: ValueKey(
+                                    'library-item-menu-book-${book.id}',
                                   ),
-                                  onPressed: () =>
-                                      _moveBook(context, ref, book.id),
+                                  kind: LibraryItemKind.book,
+                                  onSelected: (action) => _handleItemAction(
+                                    context,
+                                    kind: LibraryItemKind.book,
+                                    itemId: book.id,
+                                    itemName: book.name,
+                                    parentId: book.folderId,
+                                    action: action,
+                                  ),
                                 )
                               : _selectionTrailing(
                                   context,
@@ -250,7 +271,20 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
                           ),
                           title: Text(subject.name),
                           trailing: selection == null
-                              ? const Icon(Icons.chevron_right)
+                              ? LibraryItemActionMenu(
+                                  key: ValueKey(
+                                    'library-item-menu-${_subjectKind(subject).name}-${subject.id}',
+                                  ),
+                                  kind: _subjectKind(subject),
+                                  onSelected: (action) => _handleItemAction(
+                                    context,
+                                    kind: _subjectKind(subject),
+                                    itemId: subject.id,
+                                    itemName: subject.name,
+                                    parentId: subject.parentId,
+                                    action: action,
+                                  ),
+                                )
                               : _selectionTrailing(
                                   context,
                                   selection,
@@ -286,6 +320,20 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
                             leading: const Icon(Icons.description_outlined),
                             title: Text(note.displayTitle),
                             subtitle: Text(note.summary, maxLines: 1),
+                            trailing: LibraryItemActionMenu(
+                              key: ValueKey(
+                                'library-item-menu-note-${note.id}',
+                              ),
+                              kind: LibraryItemKind.note,
+                              onSelected: (action) => _handleItemAction(
+                                context,
+                                kind: LibraryItemKind.note,
+                                itemId: note.id,
+                                itemName: note.displayTitle,
+                                parentId: note.subjectId,
+                                action: action,
+                              ),
+                            ),
                             onTap: () =>
                                 context.push('/notes/editor/${note.id}'),
                           ),
@@ -384,11 +432,12 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
         }
         return;
       }
+      if (!context.mounted) return;
       ref.read(libraryNavigationVmProvider.notifier).completeSelection();
       await context.push(
         '/notes/editor/new?subjectId=${(target as LibrarySubjectLocation).subjectId}',
       );
-      if (context.mounted) _refreshLibraryRoots(ref, location);
+      if (context.mounted) _refreshLibraryRoots(ref);
       return;
     }
     final result = await _createDraftAt(
@@ -405,126 +454,107 @@ class _LibraryBrowserViewState extends ConsumerState<LibraryBrowserView> {
       return;
     }
     ref.read(libraryNavigationVmProvider.notifier).completeSelection();
-    _refreshLibraryRoots(ref, location);
+    _refreshLibraryRoots(ref);
   }
 
-  Future<void> _handleFolderAction(
-    BuildContext context,
-    WidgetRef ref,
-    SubjectFolder folder,
-    _FolderAction action,
-  ) async {
-    if (action == _FolderAction.rename) {
-      final controller = TextEditingController(text: folder.name);
-      final name = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('重命名文件夹'),
-          content: TextField(controller: controller, autofocus: true),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      );
-      controller.dispose();
-      if (name == null) return;
-      final result = await ref
-          .read(folderRepositoryProvider)
-          .rename(id: folder.id, name: name);
-      if (!context.mounted) return;
-      _showResult(context, result);
-    } else if (action == _FolderAction.move) {
-      final destination = await _chooseFolderDestination(context, ref);
-      if (destination == null) return;
-      final parentId = destination == _rootDestination ? null : destination;
-      final repository = ref.read(folderRepositoryProvider);
-      final targetResult = await repository.childrenOf(parentId);
-      if (!context.mounted) return;
-      if (targetResult case Failure<List<SubjectFolder>>(:final exception)) {
-        ScaffoldMessenger.of(
+  Future<void> _handleItemAction(
+    BuildContext context, {
+    required LibraryItemKind kind,
+    required String itemId,
+    required String itemName,
+    required String? parentId,
+    required LibraryItemAction action,
+  }) async {
+    switch (action) {
+      case LibraryItemAction.rename:
+        await _renameItem(context, kind, itemId, itemName);
+      case LibraryItemAction.move:
+        final changed = await _launchMove(
           context,
-        ).showSnackBar(SnackBar(content: Text(exception.userMessage)));
-        return;
-      }
-      final targetIndex = (targetResult as Success<List<SubjectFolder>>).value
-          .where((target) => target.id != folder.id)
-          .length;
-      final result = await repository.moveFolder(
-        folderId: folder.id,
-        newParentId: parentId,
-        targetIndex: targetIndex,
-      );
-      if (!context.mounted) return;
-      _showResult(context, result);
-    } else {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('安全解散文件夹'),
-          content: const Text('直属子文件夹和书会自动上移，笔记不会被删除。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('解散'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      final result = await ref
-          .read(folderRepositoryProvider)
-          .dissolve(folder.id);
-      if (!context.mounted) return;
-      _showResult(context, result);
+          LibraryMoveRequest(kind: kind, itemId: itemId, itemName: itemName),
+        );
+        if (changed == true) _refreshLibraryRoots(ref);
+      case LibraryItemAction.reorder:
+        final changed = await _launchReorder(
+          context,
+          LibraryReorderRequest(
+            kind: kind,
+            parentId: parentId,
+            title: '调整${_kindLabel(kind)}顺序',
+          ),
+        );
+        if (changed == true) _refreshLibraryRoots(ref);
+      case LibraryItemAction.dissolve:
+        await _dissolveFolder(context, itemId);
     }
-    _refreshLibraryRoots(ref, location);
   }
 
-  Future<void> _moveBook(
+  Future<bool?> _launchMove(BuildContext context, LibraryMoveRequest request) {
+    final launcher = widget.moveLauncher;
+    return launcher == null
+        ? showLibraryMoveView(context, request: request)
+        : launcher(context, request);
+  }
+
+  Future<bool?> _launchReorder(
     BuildContext context,
-    WidgetRef ref,
-    String bookId,
+    LibraryReorderRequest request,
+  ) {
+    final launcher = widget.reorderLauncher;
+    return launcher == null
+        ? showLibraryReorderView(context, request: request)
+        : launcher(context, request);
+  }
+
+  Future<void> _renameItem(
+    BuildContext context,
+    LibraryItemKind kind,
+    String itemId,
+    String currentName,
   ) async {
-    final destination = await _chooseFolderDestination(context, ref);
-    if (destination == null) return;
-    final folderId = destination == _rootDestination ? null : destination;
-    final repository = ref.read(folderRepositoryProvider);
-    final targetResult = await repository.booksIn(folderId);
+    final name = await _showRenameDialog(context, kind, currentName);
+    if (name == null) return;
+    final result = switch (kind) {
+      LibraryItemKind.folder =>
+        ref.read(folderRepositoryProvider).rename(id: itemId, name: name),
+      LibraryItemKind.book ||
+      LibraryItemKind.chapter ||
+      LibraryItemKind.section =>
+        ref.read(subjectRepositoryProvider).rename(id: itemId, name: name),
+      LibraryItemKind.note =>
+        ref.read(noteRepositoryProvider).renameTitle(id: itemId, title: name),
+    };
+    final resolved = await result;
     if (!context.mounted) return;
-    if (targetResult case Failure<List<Subject>>(:final exception)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(exception.userMessage)));
-      return;
-    }
-    final targetIndex = (targetResult as Success<List<Subject>>).value
-        .where((target) => target.id != bookId)
-        .length;
-    final result = await repository.moveBook(
-      bookId: bookId,
-      folderId: folderId,
-      targetIndex: targetIndex,
+    _showResult(context, resolved);
+    if (resolved is Success<void>) _refreshLibraryRoots(ref);
+  }
+
+  Future<void> _dissolveFolder(BuildContext context, String folderId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('安全解散文件夹'),
+        content: const Text('直属子文件夹和书会自动上移，笔记不会被删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('解散'),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true) return;
+    final result = await ref.read(folderRepositoryProvider).dissolve(folderId);
     if (!context.mounted) return;
     _showResult(context, result);
-    _refreshLibraryRoots(ref, location);
+    if (result is Success<void>) _refreshLibraryRoots(ref);
   }
 }
-
-enum _FolderAction { rename, move, dissolve }
-
-const _rootDestination = '__root_destination__';
 
 String _locationRoute(LibraryLocation location) => switch (location) {
   LibraryRootLocation() => '/notes',
@@ -533,42 +563,47 @@ String _locationRoute(LibraryLocation location) => switch (location) {
   LibrarySubjectLocation(:final subjectId) => '/notes/subject/$subjectId',
 };
 
-Future<String?> _chooseFolderDestination(
+Future<String?> _showRenameDialog(
   BuildContext context,
-  WidgetRef ref,
+  LibraryItemKind kind,
+  String currentName,
 ) async {
-  final result = await ref.read(folderRepositoryProvider).listAll();
-  if (result case Failure<List<SubjectFolder>>(:final exception)) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(exception.userMessage)));
-    }
-    return null;
-  }
-  final folders = (result as Success<List<SubjectFolder>>).value;
-  if (!context.mounted) return null;
-  return showModalBottomSheet<String>(
+  final controller = TextEditingController(text: currentName);
+  final name = await showDialog<String>(
     context: context,
-    builder: (sheetContext) => SafeArea(
-      child: ListView(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.home_outlined),
-            title: const Text('根目录／未归类'),
-            onTap: () => Navigator.pop(sheetContext, _rootDestination),
-          ),
-          for (final folder in folders)
-            ListTile(
-              leading: const Icon(Icons.folder_outlined),
-              title: Text(folder.name),
-              onTap: () => Navigator.pop(sheetContext, folder.id),
-            ),
-        ],
-      ),
+    builder: (dialogContext) => AlertDialog(
+      title: Text('重命名${_kindLabel(kind)}'),
+      content: TextField(controller: controller, autofocus: true),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, controller.text),
+          child: const Text('保存'),
+        ),
+      ],
     ),
   );
+  WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+  return name;
 }
+
+LibraryItemKind _subjectKind(Subject subject) => switch (subject.level) {
+  0 => LibraryItemKind.book,
+  1 => LibraryItemKind.chapter,
+  2 => LibraryItemKind.section,
+  _ => throw StateError('未知书章节层级：${subject.level}'),
+};
+
+String _kindLabel(LibraryItemKind kind) => switch (kind) {
+  LibraryItemKind.folder => '文件夹',
+  LibraryItemKind.book => '书',
+  LibraryItemKind.chapter => '章',
+  LibraryItemKind.section => '节',
+  LibraryItemKind.note => '笔记',
+};
 
 void _showResult(BuildContext context, Result<void> result) {
   if (!context.mounted || result is Success<void>) return;
@@ -577,11 +612,13 @@ void _showResult(BuildContext context, Result<void> result) {
   );
 }
 
-void _refreshLibraryRoots(WidgetRef ref, LibraryLocation location) {
-  ref.invalidate(libraryBrowserProvider(location));
-  ref.invalidate(libraryBrowserProvider(const LibraryLocation.root()));
+void _refreshLibraryRoots(WidgetRef ref) {
+  invalidateLibraryBrowserData(ref);
   ref.invalidate(librarySelectionRulesProvider);
-  refreshLibraryExpandedTree(ref);
+  // u{5EF6}u{8FDF}u{5230}u{4E0B}u{4E00}u{5E27}u{5237}u{65B0}u{5C55}u{5F00}u{6811}u{FF0C}u{907F}u{514D}u{9875}u{9762}u{8F6C}u{573A}u{671F}u{95F4} Focus u{8282}u{70B9}u{5728}u{9519}u{8BEF}u{7684} build scope u{4E2D}u{91CD}u{5EFA}
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    refreshLibraryExpandedTree(ref);
+  });
 }
 
 Future<Result<void>> _createDraftAt(

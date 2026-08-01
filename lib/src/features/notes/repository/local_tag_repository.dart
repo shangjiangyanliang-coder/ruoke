@@ -37,9 +37,8 @@ class LocalTagRepository implements TagRepository {
         normalized,
         daoMode,
       )).map(Tag.fromEntity).toList(),
-      orElse: (error) => const Failure(
-        DatabaseException('搜索标签失败', techDetail: 'searchTags'),
-      ),
+      orElse: (error) =>
+          const Failure(DatabaseException('搜索标签失败', techDetail: 'searchTags')),
     );
   }
 
@@ -164,11 +163,7 @@ class LocalTagRepository implements TagRepository {
         await _requireActiveNote(noteId);
         final entity = await _findOrCreateTag(normalized);
         await _noteTagDao.insertNoteTag(
-          NoteTagEntity(
-            noteId: noteId,
-            tagId: entity.id,
-            createdAt: nowMs(),
-          ),
+          NoteTagEntity(noteId: noteId, tagId: entity.id, createdAt: nowMs()),
         );
         return Tag.fromEntity(entity);
       }),

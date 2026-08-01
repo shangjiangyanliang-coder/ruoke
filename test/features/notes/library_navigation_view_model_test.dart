@@ -37,7 +37,10 @@ void main() {
 
     vm.cancelSelection();
 
-    expect(container.read(libraryNavigationVmProvider).value!.selection, isNull);
+    expect(
+      container.read(libraryNavigationVmProvider).value!.selection,
+      isNull,
+    );
     expect(
       container.read(libraryNavigationVmProvider).value!.browseMode,
       LibraryBrowseMode.expanded,

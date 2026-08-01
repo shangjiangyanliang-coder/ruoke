@@ -56,14 +56,12 @@ class SubjectTreeState {
     List<Note>? uncategorized,
     Set<String>? expandedIds,
     bool? uncategorizedExpanded,
-  }) =>
-      SubjectTreeState(
-        books: books ?? this.books,
-        uncategorized: uncategorized ?? this.uncategorized,
-        expandedIds: expandedIds ?? this.expandedIds,
-        uncategorizedExpanded:
-            uncategorizedExpanded ?? this.uncategorizedExpanded,
-      );
+  }) => SubjectTreeState(
+    books: books ?? this.books,
+    uncategorized: uncategorized ?? this.uncategorized,
+    expandedIds: expandedIds ?? this.expandedIds,
+    uncategorizedExpanded: uncategorizedExpanded ?? this.uncategorizedExpanded,
+  );
 }
 
 /// B1 笔记分级树 ViewModel（手写 AsyncNotifier）。
@@ -132,7 +130,8 @@ class SubjectTreeVm extends AsyncNotifier<SubjectTreeState> {
     final cur = state.value;
     if (cur == null) return;
     state = AsyncData(
-        cur.copyWith(uncategorizedExpanded: !cur.uncategorizedExpanded));
+      cur.copyWith(uncategorizedExpanded: !cur.uncategorizedExpanded),
+    );
   }
 
   /// 把扁平 subjects + notes 构造成嵌套树。
@@ -159,8 +158,9 @@ class SubjectTreeVm extends AsyncNotifier<SubjectTreeState> {
     // parentId 在 child 列表里的已按 sortOrder 升序（listAll 已排序），保持。
 
     SubjectTreeNode buildNode(Subject s) {
-      final children =
-          (byParent[s.id] ?? const <Subject>[]).map(buildNode).toList();
+      final children = (byParent[s.id] ?? const <Subject>[])
+          .map(buildNode)
+          .toList();
       return SubjectTreeNode(
         subject: s,
         children: children,

@@ -115,6 +115,11 @@ final libraryBrowserProvider = FutureProvider.autoDispose
       }
     });
 
+/// 目录结构变化后失效全部位置实例，避免导航栈中的来源页或目标页保留旧快照。
+void invalidateLibraryBrowserData(WidgetRef ref) {
+  ref.invalidate(libraryBrowserProvider);
+}
+
 List<SubjectFolder> _folderPath(List<SubjectFolder> folders, String folderId) {
   final byId = {for (final folder in folders) folder.id: folder};
   final path = <SubjectFolder>[];

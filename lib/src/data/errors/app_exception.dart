@@ -31,7 +31,11 @@ class AiServiceException extends AppException {
   /// notConfigured / offline / disabledByPrivacy / failed
   final String reason;
 
-  const AiServiceException(super.userMessage, {required this.reason, super.techDetail});
+  const AiServiceException(
+    super.userMessage, {
+    required this.reason,
+    super.techDetail,
+  });
 }
 
 /// OCR 引擎异常。

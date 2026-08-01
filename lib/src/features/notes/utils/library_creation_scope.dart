@@ -40,20 +40,30 @@ class LibraryCreationScope {
     if (allowed == null) {
       return [
         const LibraryCreationTarget(id: null, name: '根目录'),
-        ..._folders.map((folder) => LibraryCreationTarget(id: folder.id, name: folder.name)),
+        ..._folders.map(
+          (folder) => LibraryCreationTarget(id: folder.id, name: folder.name),
+        ),
       ];
     }
     return _folders
         .where((folder) => allowed.contains(folder.id))
-        .map((folder) => LibraryCreationTarget(id: folder.id, name: folder.name))
+        .map(
+          (folder) => LibraryCreationTarget(id: folder.id, name: folder.name),
+        )
         .toList();
   }
 
   List<LibraryCreationTarget> _subjectTargets(int targetLevel) {
     final allowed = _allowedSubjectIds();
     return _subjects
-        .where((subject) => subject.level == targetLevel && allowed.contains(subject.id))
-        .map((subject) => LibraryCreationTarget(id: subject.id, name: subject.name))
+        .where(
+          (subject) =>
+              subject.level == targetLevel && allowed.contains(subject.id),
+        )
+        .map(
+          (subject) =>
+              LibraryCreationTarget(id: subject.id, name: subject.name),
+        )
         .toList();
   }
 
@@ -70,19 +80,30 @@ class LibraryCreationScope {
     return switch (location) {
       LibraryRootLocation() => _subjects.map((subject) => subject.id).toSet(),
       LibraryUngroupedBooksLocation() => _subjectDescendants(
-        _subjects.where((subject) => subject.level == 0 && subject.folderId == null).map((subject) => subject.id),
+        _subjects
+            .where((subject) => subject.level == 0 && subject.folderId == null)
+            .map((subject) => subject.id),
       ),
       LibraryFolderLocation(:final folderId) => _subjectDescendants(
-        _subjects.where((subject) => subject.level == 0 && _folderDescendants(folderId).contains(subject.folderId)).map((subject) => subject.id),
+        _subjects
+            .where(
+              (subject) =>
+                  subject.level == 0 &&
+                  _folderDescendants(folderId).contains(subject.folderId),
+            )
+            .map((subject) => subject.id),
       ),
-      LibrarySubjectLocation(:final subjectId) => _subjectDescendants([subjectId]),
+      LibrarySubjectLocation(:final subjectId) => _subjectDescendants([
+        subjectId,
+      ]),
     };
   }
 
   Set<String> _folderDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final folder in _folders) {
-      if (folder.parentId != null) (children[folder.parentId!] ??= []).add(folder.id);
+      if (folder.parentId != null)
+        (children[folder.parentId!] ??= []).add(folder.id);
     }
     final result = <String>{};
     final pending = <String>[rootId];
@@ -96,7 +117,8 @@ class LibraryCreationScope {
   Set<String> _subjectDescendants(Iterable<String> roots) {
     final children = <String, List<String>>{};
     for (final subject in _subjects) {
-      if (subject.parentId != null) (children[subject.parentId!] ??= []).add(subject.id);
+      if (subject.parentId != null)
+        (children[subject.parentId!] ??= []).add(subject.id);
     }
     final result = <String>{};
     final pending = roots.toList();
