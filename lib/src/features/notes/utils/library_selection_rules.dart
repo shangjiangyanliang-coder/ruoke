@@ -46,8 +46,9 @@ class LibrarySelectionRules {
     required LibrarySelectionSession session,
     required LibraryLocation location,
   }) {
-    if (!isWithinScope(origin: session.origin, candidate: location))
+    if (!isWithinScope(origin: session.origin, candidate: location)) {
       return false;
+    }
     if (session.kind == LibrarySelectionKind.noteLocation) {
       final subject = _subjectAt(location);
       return subject != null && subject.level >= 0 && subject.level <= 2;
@@ -105,8 +106,9 @@ class LibrarySelectionRules {
   Set<String> _folderDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final folder in _folders) {
-      if (folder.parentId != null)
+      if (folder.parentId != null) {
         (children[folder.parentId!] ??= []).add(folder.id);
+      }
     }
     final result = <String>{};
     final pending = <String>[rootId];
@@ -120,8 +122,9 @@ class LibrarySelectionRules {
   Set<String> _subjectDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final subject in _subjectsById.values) {
-      if (subject.parentId != null)
+      if (subject.parentId != null) {
         (children[subject.parentId!] ??= []).add(subject.id);
+      }
     }
     final result = <String>{};
     final pending = <String>[rootId];

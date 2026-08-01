@@ -102,8 +102,9 @@ class LibraryCreationScope {
   Set<String> _folderDescendants(String rootId) {
     final children = <String, List<String>>{};
     for (final folder in _folders) {
-      if (folder.parentId != null)
+      if (folder.parentId != null) {
         (children[folder.parentId!] ??= []).add(folder.id);
+      }
     }
     final result = <String>{};
     final pending = <String>[rootId];
@@ -117,8 +118,9 @@ class LibraryCreationScope {
   Set<String> _subjectDescendants(Iterable<String> roots) {
     final children = <String, List<String>>{};
     for (final subject in _subjects) {
-      if (subject.parentId != null)
+      if (subject.parentId != null) {
         (children[subject.parentId!] ??= []).add(subject.id);
+      }
     }
     final result = <String>{};
     final pending = roots.toList();
